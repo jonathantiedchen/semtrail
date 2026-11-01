@@ -17,7 +17,7 @@ def service(demo):
 def test_http_investigation_catalog_and_history(service):
     with TestClient(create_app(service), base_url="http://localhost") as client:
         agents = client.get("/api/agents").json()
-        assert {a["id"] for a in agents} == {"revenue", "customers"}
+        assert {a["id"] for a in agents} == {"revenue", "customers", "orchestrator"}
         catalog = client.get("/api/agents/revenue/catalog").json()
         assert "payroll" not in str(catalog)
         response = client.post(

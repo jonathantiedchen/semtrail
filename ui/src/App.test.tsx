@@ -91,7 +91,7 @@ test("investigates through the API and exposes supporting SQL", async () => {
     if (!input.value) await user.type(input, question);
   }
   await user.click(screen.getByRole("button", { name: "Send message" }));
-  await screen.findByText("Semtrail");
+  await screen.findByRole("heading", { name: "Semtrail" });
   expect(screen.getAllByText("700").length).toBeGreaterThan(0);
   await user.click(screen.getByRole("button", { name: "Show details" }));
   await user.click(screen.getByRole("button", { name: /^SQL$/ }));
@@ -132,7 +132,7 @@ test("switches between context and query evidence without losing the answer", as
   await screen.findByRole("heading", { name: "Query evidence" });
   await user.click(screen.getByRole("button", { name: "Agent context" }));
   expect(screen.getByText("Enforced at query execution")).toBeInTheDocument();
-  expect(screen.getByText("Semtrail")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Semtrail" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /^Evidence/ }));
   expect(screen.getAllByText("700").length).toBeGreaterThan(0);
 });
@@ -212,6 +212,58 @@ test("keeps earlier messages and sends server-owned context for follow-ups", asy
       body: JSON.stringify({
         question: "How many orders does that include?",
         previous_run_ids: ["reply-1"],
+      }),
+    }),
+  );
+});
+
+test("keeps agent choice in the composer and saves domain settings", async () => {
+  const user = userEvent.setup();
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  const auto = {
+    ...agent,
+    id: "orchestrator",
+    name: "Auto",
+    kind: "orchestrator",
+    allowed_agents: ["revenue"],
+    provider_agent: null,
+  };
+  vi.mocked(fetch).mockImplementation(async (...args) => {
+    if (String(args[0]).endsWith("/agents"))
+      return new Response(JSON.stringify([auto, { ...agent, kind: "domain" }]));
+    return original(...args);
+  });
+  render(<App />);
+  await screen.findByLabelText("Ask auto");
+  expect(screen.getByRole("combobox", { name: "Chat agent" })).toHaveValue(
+    "orchestrator",
+  );
+  expect(screen.queryByText("AGENTS")).not.toBeInTheDocument();
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "Chat agent" }),
+    "revenue",
+  );
+  await screen.findByLabelText("Ask revenue analyst");
+  await user.click(
+    screen.getByRole("button", { name: "Settings" }),
+  );
+  await user.click(
+    screen.getByRole("button", { name: /revenue.*Domain agent/i }),
+  );
+  const instructions = screen.getByLabelText("Instructions");
+  await user.clear(instructions);
+  await user.type(instructions, "Answer using approved finance definitions.");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await screen.findByText("Saved. New messages use these settings.");
+  expect(fetch).toHaveBeenCalledWith(
+    "/api/agents/revenue/settings",
+    expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify({
+        instructions: "Answer using approved finance definitions.",
+        policy: agent.policy,
+        max_steps: 12,
+        max_queries: 6,
       }),
     }),
   );

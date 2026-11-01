@@ -28,18 +28,30 @@ import {
 } from "lucide-react";
 import { api, downloadJson } from "./api";
 import type { Agent, Catalog, Run, RunSummary } from "./types";
+import AgentSettings from "./AgentSettings";
 import ResultVisuals from "./ResultVisuals";
 import CatalogPanel from "./CatalogPanel";
 import EvidencePanel, { CodeBlock } from "./EvidencePanel";
 
-type View = "overview" | "investigate" | "catalog" | "history" | "integrations";
+type View =
+  | "overview"
+  | "investigate"
+  | "catalog"
+  | "history"
+  | "integrations"
+  | "settings";
 const navigation = [
   { id: "investigate" as const, title: "Chat", icon: MessageSquare },
   { id: "catalog" as const, title: "Semantic catalog", icon: Layers3 },
   { id: "history" as const, title: "Chat history", icon: Clock3 },
   { id: "integrations" as const, title: "Integrations", icon: Braces },
+  { id: "settings" as const, title: "Settings", icon: Settings2 },
 ];
 const titles = {
+  settings: [
+    "Settings",
+    "Configure domain agents and automatic orchestration.",
+  ],
   catalog: [
     "Semantic catalog",
     "Explore the business definitions and models available to this agent.",
@@ -54,6 +66,7 @@ const titles = {
   ],
 };
 function displayName(agent: Agent) {
+  if (agent.id === "orchestrator") return "Auto";
   return `${agent.name.charAt(0).toUpperCase()}${agent.name.slice(1)} analyst`;
 }
 function Explanation({
@@ -86,6 +99,7 @@ export default function App() {
   const [inspector, setInspector] = useState<"scope" | "evidence">("scope");
   const questionInput = useRef<HTMLTextAreaElement>(null);
   const [view, setView] = useState<View>("investigate");
+  const [settingsRevision, setSettingsRevision] = useState(0);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -153,7 +167,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, settingsRevision]);
   useEffect(() => {
     if (!selected) return;
     let active = true;
@@ -187,9 +201,20 @@ export default function App() {
           method: "POST",
           body: JSON.stringify({
             question,
-            ...([...previousMessages, ...(run ? [run] : [])].length
+            ...([...previousMessages, ...(run ? [run] : [])].filter(
+              (item) =>
+                item.agent ===
+                (selected === "orchestrator" ? "orchestrator" : agent.name),
+            ).length
               ? {
                   previous_run_ids: [...previousMessages, ...(run ? [run] : [])]
+                    .filter(
+                      (item) =>
+                        item.agent ===
+                        (selected === "orchestrator"
+                          ? "orchestrator"
+                          : agent.name),
+                    )
                     .slice(-6)
                     .map((item) => item.run_id),
                 }
@@ -301,44 +326,6 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-heading">
-          <span>AGENTS</span>
-          <span>{agents.length}</span>
-        </div>
-        <div className="agent-list">
-          {agents.map((item) => (
-            <button
-              key={item.id}
-              disabled={busy}
-              aria-pressed={selected === item.id}
-              onClick={() => {
-                setSelected(item.id);
-                setQuestion("");
-                setRun(null);
-                setPreviousMessages([]);
-                setInspector("scope");
-                setView("investigate");
-              }}
-            >
-              <span
-                className={`agent-avatar ${item.id === "customers" ? "blue" : "purple"}`}
-              >
-                {item.id === "customers" ? (
-                  <Users size={16} />
-                ) : (
-                  <Activity size={16} />
-                )}
-              </span>
-              <div>
-                <strong>{displayName(item)}</strong>
-                <span>
-                  {item.model_count} models · {item.metric_count} metrics
-                </span>
-              </div>
-              <span className={`agent-state ${item.ready ? "ready" : ""}`} />
-            </button>
-          ))}
-        </div>
         {runs.length ? (
           <div className="sidebar-recent">
             <div className="sidebar-heading">CHATS</div>
@@ -349,7 +336,9 @@ export default function App() {
                 onClick={() => openRun(item)}
               >
                 <MessageSquare size={13} />
-                <span>{item.agent} chat</span>
+                <span>
+                  {item.agent === "orchestrator" ? "Auto" : item.agent} chat
+                </span>
                 <ChevronRight size={12} />
               </button>
             ))}
@@ -426,25 +415,7 @@ export default function App() {
                       <Activity size={14} />
                     )}
                   </span>
-                  <label className="chat-agent-picker">
-                    <select
-                      aria-label="Chat agent"
-                      value={selected}
-                      disabled={busy}
-                      onChange={(event) => {
-                        setSelected(event.target.value);
-                        setRun(null);
-                        setPreviousMessages([]);
-                        setQuestion("");
-                      }}
-                    >
-                      {agents.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {displayName(item)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <strong>Semtrail</strong>
                   <span className="subtle-badge">
                     {agent.ready ? "Ready" : "Setup required"}
                   </span>
@@ -497,6 +468,11 @@ export default function App() {
                           <GitBranch size={16} />
                         </span>
                         <h2>Semtrail</h2>
+                        {run.routing ? (
+                          <span className="route-badge">
+                            via {run.routing.agent_id}
+                          </span>
+                        ) : null}
                         <span className="subtle-badge">
                           <Check size={11} />
                           {run.answer.status.replaceAll("_", " ")}
@@ -634,9 +610,29 @@ export default function App() {
                     disabled={busy || !agent.ready}
                   />
                   <div className="composer-toolbar">
+                    <label className="chat-agent-picker">
+                      <select
+                        aria-label="Chat agent"
+                        value={selected}
+                        disabled={busy}
+                        onChange={(event) => {
+                          setSelected(event.target.value);
+                          setInspectorOpen(false);
+                        }}
+                      >
+                        {agents.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {displayName(item)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
                     <span>
                       <ShieldCheck size={13} />
-                      Read-only · {agent.model_count} permitted models
+                      {agent.id === "orchestrator"
+                        ? "Routes to a domain agent"
+                        : `Read-only · ${agent.model_count} permitted models`}
                     </span>
                     <button
                       className="primary-button"
@@ -690,7 +686,8 @@ export default function App() {
                   onClick={() => setInspector("evidence")}
                 >
                   <Database size={14} />
-                  Evidence<span>{run?.queries.length || 0}</span>
+                  Evidence
+                  <span>{(evidenceRun || run)?.queries.length || 0}</span>
                 </button>
               </div>
               {inspector === "evidence" ? (
@@ -723,31 +720,43 @@ export default function App() {
                       )}
                     </span>
                     <h2>{displayName(agent)}</h2>
-                    <span>Domain agent</span>
+                    <span>
+                      {agent.id === "orchestrator"
+                        ? "Orchestration agent"
+                        : "Domain agent"}
+                    </span>
                   </div>
                   <p className="scope-description">{agent.instructions}</p>
-                  <div className="scope-counts">
-                    <button onClick={() => setView("catalog")}>
-                      <strong>{agent.model_count}</strong>
-                      <span>Models</span>
-                    </button>
-                    <button onClick={() => setView("catalog")}>
-                      <strong>{agent.metric_count}</strong>
-                      <span>Metrics</span>
-                    </button>
-                    <div>
-                      <strong>{agent.max_queries}</strong>
-                      <span>Query limit</span>
+                  {agent.id !== "orchestrator" ? (
+                    <div className="scope-counts">
+                      <button onClick={() => setView("catalog")}>
+                        <strong>{agent.model_count}</strong>
+                        <span>Models</span>
+                      </button>
+                      <button onClick={() => setView("catalog")}>
+                        <strong>{agent.metric_count}</strong>
+                        <span>Metrics</span>
+                      </button>
+                      <div>
+                        <strong>{agent.max_queries}</strong>
+                        <span>Query limit</span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <p className="mt-4 text-xs text-stone-500">
+                      Enabled domains:{" "}
+                      {(agent.allowed_agents || []).join(", ") || "None"}
+                    </p>
+                  )}
                   <section className="scope-section">
                     <h3>
                       <ShieldCheck size={14} />
                       Data access
                     </h3>
                     <p>
-                      Only models matching the permitted dbt tags can be
-                      queried.
+                      {agent.id === "orchestrator"
+                        ? "Auto cannot query data directly. Each domain agent enforces its own tag policy when delegated a question."
+                        : "Only models matching the permitted dbt tags can be queried."}
                     </p>
                     <div className="tag-row">
                       {agent.policy.allow_tags_any.map((tag) => (
@@ -838,7 +847,39 @@ export default function App() {
               <p>{titles[view][1]}</p>
             </div>
             {view === "catalog" && agent ? (
-              <CatalogPanel catalog={catalog} agent={agent} />
+              agent.id === "orchestrator" ? (
+                <section className="panel p-6">
+                  <h2 className="text-sm font-medium">
+                    Choose a domain catalog
+                  </h2>
+                  <p className="mt-2 text-xs text-stone-500">
+                    Auto routes questions to domain agents. Each domain has its
+                    own permitted models and metrics.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {agents
+                      .filter((a) => a.id !== "orchestrator")
+                      .map((a) => (
+                        <button
+                          className="quiet-button"
+                          key={a.id}
+                          onClick={() => setSelected(a.id)}
+                        >
+                          {displayName(a)}
+                        </button>
+                      ))}
+                  </div>
+                </section>
+              ) : (
+                <CatalogPanel catalog={catalog} agent={agent} />
+              )
+            ) : null}
+            {view === "settings" ? (
+              <AgentSettings
+                agents={agents}
+                token={token}
+                onSaved={() => setSettingsRevision((value) => value + 1)}
+              />
             ) : null}
             {view === "history" ? (
               <section className="panel overflow-hidden fade-in">
@@ -857,7 +898,8 @@ export default function App() {
                       </span>
                       <div className="flex-1">
                         <p className="text-sm font-medium capitalize">
-                          {item.agent} chat
+                          {item.agent === "orchestrator" ? "Auto" : item.agent}{" "}
+                          chat
                         </p>
                         <p className="mt-1 text-[11px] text-stone-400">
                           {new Date(item.created_at).toLocaleString()} ·{" "}

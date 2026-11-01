@@ -7,10 +7,10 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import Field
+from pydantic import Field, ValidationError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from semtrail.config import StrictModel
+from semtrail.config import PolicyConfig, StrictModel
 from semtrail.errors import SemtrailError
 from semtrail.service import AgentService
 
@@ -18,6 +18,15 @@ from semtrail.service import AgentService
 class Investigation(StrictModel):
     question: str = Field(min_length=1, max_length=10000)
     previous_run_ids: list[str] = Field(default_factory=list, max_length=6)
+
+
+class AgentSettings(StrictModel):
+    instructions: str = Field(min_length=1, max_length=20000)
+    policy: PolicyConfig | None = None
+    max_steps: int | None = Field(default=None, ge=2, le=40)
+    max_queries: int | None = Field(default=None, ge=1, le=20)
+    allowed_agents: list[str] | None = Field(default=None, max_length=100)
+    provider_agent: str | None = None
 
 
 def create_app(
@@ -51,7 +60,7 @@ def create_app(
                 return JSONResponse(
                     {"detail": "Cross-origin requests are disabled."}, status_code=403
                 )
-            if request.method == "POST":
+            if request.method in {"POST", "PUT"}:
                 if request.headers.get("content-type", "").split(";")[0] != "application/json":
                     return JSONResponse({"detail": "JSON required."}, status_code=415)
                 # Prevent enormous bodies before validation/JSON parsing.
@@ -80,6 +89,10 @@ def create_app(
     async def missing(request, exc):
         return JSONResponse({"detail": "Agent or run not found."}, status_code=404)
 
+    @app.exception_handler(ValueError)
+    async def invalid_reference(request, exc):
+        return JSONResponse({"detail": "Chat reference not found or invalid."}, status_code=404)
+
     @app.exception_handler(SemtrailError)
     async def safe_error(request, exc):
         return JSONResponse({"detail": str(exc)}, status_code=400)
@@ -95,6 +108,13 @@ def create_app(
     @app.get("/api/agents/{agent_id}/catalog")
     def catalog(agent_id: str):
         return service.catalog(agent_id)
+
+    @app.put("/api/agents/{agent_id}/settings")
+    def settings(agent_id: str, body: AgentSettings):
+        try:
+            return service.update_settings(agent_id, body.model_dump(exclude_unset=True))
+        except ValidationError as exc:
+            raise HTTPException(422, "Invalid agent settings.") from exc
 
     @app.post("/api/agents/{agent_id}/investigations")
     def investigate(agent_id: str, body: Investigation):

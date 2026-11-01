@@ -207,8 +207,8 @@ See [`docs/design.md`](docs/design.md) for architecture, boundaries and deferred
 
 ## React workspace
 
-The UI uses **React, TypeScript and Tailwind CSS**. It includes an investigation
-workspace, domain-agent selection, a dbt semantic catalog, query/results inspection,
+The UI uses **React, TypeScript and Tailwind CSS**. It includes a chat
+workspace, an in-composer agent picker, agent Settings, a dbt semantic catalog, query/results inspection,
 run history and JSON evidence export. All data comes from the Python API.
 
 ```bash
@@ -288,3 +288,35 @@ The default container starts the offline demo. Mount a trusted agent directory a
 pass `serve --agents /srv/agents --host 0.0.0.0` for live use, supplying database and
 LLM environment variables. Persist `/home/semtrail/.semtrail` if you want demo history
 to survive container replacement. The container runs as UID 10001.
+
+
+### Auto routing and agent Settings
+
+Choose **Auto** in the chat composer to let the LangGraph orchestration agent
+route each message to one enabled domain agent. Choose a domain explicitly to
+address it directly. Replies show the delegated domain, and their SQL/results
+remain inspectable. Ambiguous or cross-domain questions ask for clarification;
+this first version does not combine data or permissions across domains.
+
+**Settings** edits domain instructions, dbt allow/deny tags and query/turn budgets.
+It also configures Auto's instructions, enabled domains and routing model source.
+Changes persist to the server's YAML files and apply to new messages. These are
+operator settings: the server is intended for a single trusted operator, not
+multiple users with different administrative rights. Credentials and database
+connections remain server-managed environment variables and YAML references.
+
+Optional `/srv/agents/_orchestrator.yml`:
+
+```yaml
+instructions: Route to one enabled domain or ask a clarifying question.
+allowed_agents: [revenue, customers]
+provider_agent: revenue
+```
+
+When the file is absent, Auto can route to all configured, ready domain agents,
+and uses the first ready domain's LLM configuration. The router sees domain
+instructions and recent questions; it has no database query tool. The delegated
+`DataAgent` uses its own provider, dbt policy, compiler and execution gate.
+The demo router recognizes only the existing domain example questions and
+otherwise asks for clarification. Live routing requires your provider key.
+The same Auto agent ID (`orchestrator`) works through the HTTP and MCP interfaces.

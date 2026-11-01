@@ -1,4 +1,7 @@
 export interface Agent {
+  kind?: "domain" | "orchestrator";
+  allowed_agents?: string[];
+  provider_agent?: string | null;
   id: string;
   name: string;
   instructions: string;
@@ -50,6 +53,7 @@ export interface Query {
   };
 }
 export interface Run {
+  routing?: { agent_id: string; child_run_id: string };
   previous_run_ids?: string[];
   run_id: string;
   agent: string;

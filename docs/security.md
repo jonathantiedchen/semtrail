@@ -63,3 +63,21 @@ Query limits include a sentinel row so truncation can be detected. Large cells a
 results are capped and marked. SQL LIMIT limits returned rows, not warehouse scan
 cost. Query counts, statement timeouts and least-privilege warehouse roles remain
 important, especially on metered databases.
+
+
+## Agent administration and orchestration
+
+The authenticated operator can change domain instructions, tag policies and budgets
+through Settings (`PUT /api/agents/{id}/settings`). These writes are validated and
+atomically replace only registered agent YAML files. Orchestration Settings write
+`_orchestrator.yml`. File paths, database DSNs and provider credentials cannot be
+changed through this endpoint. The same token, host, origin and body-size boundary
+protects configuration writes. Anyone with server access is a trusted administrator;
+per-user administrative roles are not implemented.
+
+Auto chooses one enabled, ready domain agent. Model-selected IDs are checked against
+that candidate list before delegation. Its graph has no SQL or warehouse tool and
+never unions domain permissions. Delegation executes the ordinary scoped DataAgent.
+Prior context is loaded from saved server records; only same-domain child responses
+are passed to a delegated agent. The envelope stores the route and child evidence
+reference; a clarification response contains no query results.

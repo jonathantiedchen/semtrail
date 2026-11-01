@@ -37,3 +37,13 @@ Database policies and the existing execution gate remain authoritative.
   stays reachable on mobile.
 - React integration tests cover the API flow, catalog filtering, context/evidence
   switching, and reopening query evidence from a chart.
+
+
+## Agent choice and Settings
+
+The composer contains the agent picker: Auto or an explicit domain agent. The
+sidebar contains chats and navigation only. Settings manages agent instructions,
+dbt tag policies and budgets, plus Auto's enabled domains and routing model source.
+Auto is a two-node LangGraph router/delegator: one ready domain per message, or a
+clarifying question. The selected domain is visible on the reply, and its own query
+policy remains authoritative. Configuration edits apply to new messages.
