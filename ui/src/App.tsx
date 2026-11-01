@@ -7,7 +7,7 @@ import {
   BookOpen,
   Braces,
   Check,
-  ChevronDown,
+  ChevronRight,
   CircleDot,
   Clock3,
   Database,
@@ -37,28 +37,23 @@ const navigation = [
   { id: "history" as const, title: "Run history", icon: Clock3 },
   { id: "integrations" as const, title: "Integrations", icon: Braces },
 ];
-const titles: Record<View, [string, string]> = {
-  investigate: [
-    "Good questions. Grounded answers.",
-    "Investigate your business with agents that know what your data means.",
-  ],
+const titles = {
   catalog: [
-    "Your business, defined.",
-    "The models and metrics this agent can use, directly from dbt.",
+    "Semantic catalog",
+    "Explore the business definitions and models available to this agent.",
   ],
   history: [
-    "An answer is only the beginning.",
-    "Revisit investigations and follow the evidence behind each conclusion.",
+    "Run history",
+    "Reopen an investigation to inspect its answer, SQL, and results.",
   ],
   integrations: [
-    "Fits into your world.",
-    "Your repository, your warehouse, your model. Connect the tools you already use.",
+    "Integrations",
+    "Connect your data stack and use Semtrail in your existing workflows.",
   ],
 };
 function displayName(agent: Agent) {
   return `${agent.name.charAt(0).toUpperCase()}${agent.name.slice(1)} analyst`;
 }
-
 function Explanation({
   text,
   onCitation,
@@ -67,13 +62,13 @@ function Explanation({
   onCitation: (id: string) => void;
 }) {
   return (
-    <p className="whitespace-pre-wrap text-sm leading-8 text-stone-600">
+    <p className="answer-copy">
       {text.split(/(\[q\d+\])/g).map((part, i) =>
         /^\[q\d+\]$/.test(part) ? (
           <button
             key={i}
+            className="citation"
             onClick={() => onCitation(part.slice(1, -1))}
-            className="mx-1 rounded bg-forest-50 px-1.5 py-0.5 font-mono text-xs font-medium text-forest-700 hover:bg-forest-100"
           >
             {part}
           </button>
@@ -84,8 +79,9 @@ function Explanation({
     </p>
   );
 }
-
 export default function App() {
+  const [inspector, setInspector] = useState<"scope" | "evidence">("scope");
+  const questionInput = useRef<HTMLTextAreaElement>(null);
   const [view, setView] = useState<View>("investigate");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState("");
@@ -109,14 +105,24 @@ export default function App() {
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setShowAccess(false);
       if (event.key !== "Tab") return;
-      const elements = dialog.current?.querySelectorAll<HTMLElement>("button, input");
+      const elements =
+        dialog.current?.querySelectorAll<HTMLElement>("button, input");
       if (!elements?.length) return;
-      const first = elements[0], last = elements[elements.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      const first = elements[0],
+        last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", keydown);
-    return () => { document.removeEventListener("keydown", keydown); previous?.focus(); };
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      previous?.focus();
+    };
   }, [showAccess]);
 
   useEffect(() => {
@@ -132,6 +138,7 @@ export default function App() {
           setMode(health.mode);
           setRuns(history);
           setSelected((previous) => previous || list[0]?.id || "");
+          setQuestion((previous) => previous || list[0]?.demo_question || "");
           setError("");
         }
       })
@@ -153,9 +160,7 @@ export default function App() {
       .catch((reason) => {
         if (active) setError(reason.message);
       });
-    setQuestion(
-      agents.find((agent) => agent.id === selected)?.demo_question || "",
-    );
+
     return () => {
       active = false;
     };
@@ -174,6 +179,7 @@ export default function App() {
         { method: "POST", body: JSON.stringify({ question }) },
       );
       setRun(result);
+      setInspector("evidence");
       setQueryId(result.queries[0]?.query_id || "q1");
       setRuns(await api<RunSummary[]>("/runs", token));
     } catch (reason) {
@@ -193,7 +199,9 @@ export default function App() {
       );
       setSelected(item.agent_id);
       setRun(result);
+      setInspector("evidence");
       setQueryId(result.queries[0]?.query_id || "q1");
+      setQuestion(result.question);
       setView("investigate");
     } catch (reason) {
       setError(
@@ -202,67 +210,81 @@ export default function App() {
     }
   }
 
+  function newInvestigation() {
+    setRun(null);
+    setError("");
+    setQuestion(agent?.demo_question || "");
+    setInspector("scope");
+    setView("investigate");
+    questionInput.current?.focus();
+  }
+  function selectCitation(id: string) {
+    setQueryId(id);
+    setInspector("evidence");
+    document
+      .getElementById("investigation-inspector")
+      ?.scrollIntoView({ block: "nearest" });
+  }
   return (
-    <div className="min-h-screen lg:flex">
-      <aside className="flex shrink-0 flex-col border-b border-stone-200 bg-[#f0f2ec] lg:fixed lg:inset-y-0 lg:w-[238px] lg:border-b-0 lg:border-r">
-        <a
-          href="/"
-          className="flex items-center gap-2.5 px-6 pb-6 pt-7 text-xl font-semibold tracking-tight text-forest-900"
-        >
-          <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-forest-900 text-white">
-            <GitBranch size={19} />
+    <div className="app-shell">
+      <aside className="workspace-sidebar">
+        <a href="/" className="brand">
+          <span className="brand-icon">
+            <GitBranch size={20} />
           </span>
-          semtrail<span className="mt-1 text-forest-500">.</span>
+          semtrail<span className="version">BETA</span>
         </a>
-        <div className="mx-4 mb-6 flex items-center gap-2.5 rounded-xl border border-stone-200/70 bg-white/70 px-3 py-3">
-          <span className="rounded-md bg-stone-100 p-1.5">
-            <Database size={15} className="text-stone-500" />
-          </span>
-          <div className="flex-1">
-            <p className="text-xs font-medium">My workspace</p>
-            <p className="mt-0.5 text-[10px] text-stone-400">
-              Self-hosted · v0.1
-            </p>
+        <div className="workspace-name">
+          <span className="workspace-avatar">S</span>
+          <div>
+            <strong>My workspace</strong>
+            <span>Local environment</span>
           </div>
-          <ChevronDown size={13} className="text-stone-400" />
+          <span className="status-dot" />
         </div>
-        <nav
-          aria-label="Main navigation"
-          className="flex flex-wrap gap-1 px-3 lg:block"
+        <button
+          className="new-investigation"
+          disabled={busy}
+          onClick={newInvestigation}
         >
+          <Plus size={16} />
+          New investigation
+        </button>
+        <nav aria-label="Main navigation" className="main-nav">
           {navigation.map((item) => (
             <button
               key={item.id}
               onClick={() => setView(item.id)}
               aria-current={view === item.id ? "page" : undefined}
-              className={`mb-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] transition lg:w-full ${view === item.id ? "bg-white font-medium text-forest-900 shadow-sm" : "text-stone-500 hover:bg-white/60"}`}
             >
-              <item.icon size={16} />
-              {item.title}
-              {view === item.id ? (
-                <span className="ml-auto hidden h-1.5 w-1.5 rounded-full bg-forest-500 lg:block" />
+              <item.icon size={17} />
+              <span>{item.title}</span>
+              {item.id === "history" && runs.length > 0 ? (
+                <span className="nav-count">{runs.length}</span>
               ) : null}
             </button>
           ))}
         </nav>
-        <div className="mx-6 mb-3 mt-7 flex items-center justify-between">
-          <p className="label">Your agents</p>
-          <ShieldCheck size={13} className="text-stone-400" />
+        <div className="sidebar-heading">
+          <span>AGENTS</span>
+          <span>{agents.length}</span>
         </div>
-        <div className="flex gap-2 px-3 pb-4 lg:block">
+        <div className="agent-list">
           {agents.map((item) => (
             <button
               key={item.id}
               disabled={busy}
+              aria-pressed={selected === item.id}
               onClick={() => {
                 setSelected(item.id);
+                setQuestion(item.demo_question || "");
                 setRun(null);
+                setInspector("scope");
                 setView("investigate");
               }}
-              className={`mb-2 flex items-center gap-3 rounded-xl border p-3 text-left transition lg:w-full ${selected === item.id ? "border-forest-100 bg-forest-50" : "border-transparent hover:bg-white/70"}`}
             >
               <span
-                className={`rounded-lg p-2 ${selected === item.id ? "bg-forest-100 text-forest-700" : "bg-stone-200/60 text-stone-500"}`}
+                className={`agent-avatar ${item.id === "customers" ? "blue" : "purple"}`}
               >
                 {item.id === "customers" ? (
                   <Users size={16} />
@@ -271,135 +293,296 @@ export default function App() {
                 )}
               </span>
               <div>
-                <p className="text-xs font-medium">{displayName(item)}</p>
-                <p className="mt-1 text-[10px] text-stone-400">
+                <strong>{displayName(item)}</strong>
+                <span>
                   {item.model_count} models · {item.metric_count} metrics
-                </p>
+                </span>
               </div>
+              <span className={`agent-state ${item.ready ? "ready" : ""}`} />
             </button>
           ))}
         </div>
-        <div className="mt-auto hidden p-4 lg:block">
-          <div className="rounded-xl border border-stone-200 bg-white/55 p-4">
-            <ShieldCheck size={18} className="mb-2.5 text-forest-600" />
-            <p className="text-xs font-medium">Grounded. Governed. Yours.</p>
-            <p className="mt-2 text-[11px] leading-5 text-stone-500">
-              Your compute and API keys.
-              <br />
-              Access enforced beyond the prompt.
-            </p>
+        {runs.length ? (
+          <div className="sidebar-recent">
+            <div className="sidebar-heading">RECENT RUNS</div>
+            {runs.slice(0, 3).map((item) => (
+              <button
+                disabled={busy}
+                key={item.run_id}
+                onClick={() => openRun(item)}
+              >
+                <MessageSquare size={13} />
+                <span>{item.agent} investigation</span>
+                <ChevronRight size={12} />
+              </button>
+            ))}
           </div>
+        ) : null}
+        <div className="sidebar-bottom">
+          <button onClick={() => setShowAccess(true)}>
+            <KeyRound size={15} />
+            Server access
+          </button>
           <a
             href="https://github.com/jonathantiedchen/semtrail"
             target="_blank"
             rel="noreferrer"
-            className="mt-4 flex items-center justify-between px-1 text-[11px] text-stone-500"
           >
-            Open source on GitHub
+            <GitBranch size={15} />
+            GitHub repository
             <ArrowUpRight size={13} />
           </a>
+          <div className="sidebar-version">
+            <span className="status-dot" />
+            Self-hosted<span>v0.1.0</span>
+          </div>
         </div>
       </aside>
-
-      <div className="min-w-0 flex-1 lg:ml-[238px]">
-        <header className="flex h-[76px] items-center justify-between border-b border-stone-200/70 bg-white/60 px-5 md:px-9">
-          <div className="flex items-center gap-2 text-xs text-stone-400">
+      <div className="workspace-main">
+        <header className="workspace-header">
+          <div className="breadcrumbs">
             <span>Workspace</span>
-            <span>/</span>
-            <span className="font-medium text-stone-700">
-              {agent ? displayName(agent) : "Connect"}
-            </span>
+            <ChevronRight size={13} />
+            <strong>
+              {navigation.find((item) => item.id === view)?.title}
+            </strong>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="hidden items-center gap-1.5 text-[11px] text-stone-500 sm:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-forest-500" />
-              {mode === "demo" ? "Offline demo" : "Self-hosted"}
-            </span>
+          <div className="header-actions">
             <button
-              className="quiet-button"
+              className="mobile-access icon-button"
+              aria-label="Server access"
               onClick={() => setShowAccess(true)}
             >
-              <KeyRound size={13} />
-              Access
+              <KeyRound size={14} />
             </button>
+            <span className="environment-badge">
+              <span className="status-dot" />
+              {mode === "demo" ? "Demo environment" : "Self-hosted"}
+            </span>
+            <a href="/docs" target="_blank" rel="noreferrer">
+              API docs
+              <ArrowUpRight size={13} />
+            </a>
           </div>
         </header>
-        <main className="mx-auto max-w-[1400px] px-5 py-8 md:px-9 md:py-10">
-          <div className="mb-7 flex items-start justify-between gap-4">
-            <div>
-              <p className="label mb-3">
-                {navigation.find((item) => item.id === view)?.title}
-              </p>
-              <h1 className="text-2xl font-semibold tracking-[-0.035em] text-[#263d33] md:text-[29px]">
-                {titles[view][0]}
-              </h1>
-              <p className="mt-3 text-[13px] leading-6 text-stone-500">
-                {titles[view][1]}
-              </p>
-            </div>
-            {view === "investigate" && run ? (
-              <button
-                className="quiet-button mt-5 shrink-0"
-                onClick={() => {
-                  setRun(null);
-                  setQuestion(agent?.demo_question || "");
-                }}
-              >
-                <Plus size={14} /> New
-              </button>
-            ) : null}
+        {error ? (
+          <div role="alert" className="error-banner">
+            <span>{error}</span>
+            <button aria-label="Dismiss error" onClick={() => setError("")}>
+              <X size={15} />
+            </button>
           </div>
-          {error ? (
-            <div
-              role="alert"
-              className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs leading-6 text-red-800"
-            >
-              <span>{error}</span>
-              <button aria-label="Dismiss error" onClick={() => setError("")}>
-                <X size={15} />
-              </button>
-            </div>
-          ) : null}
-          {mode === "demo" ? (
-            <div className="mb-6 flex items-start gap-2.5 rounded-xl border border-amber-200/60 bg-[#fff9eb] px-4 py-3 text-[11px] leading-5 text-amber-800">
-              <Sparkles size={15} className="mt-0.5 shrink-0" />
-              <p>
-                <strong>Explore the offline demo.</strong> Real SQL and results,
-                synthetic data, scripted model decisions. Use the example
-                question, or configure your own LLM for open-ended
-                investigations.
-              </p>
-            </div>
-          ) : null}
-
-          {view === "investigate" && agent ? (
-            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_265px]">
-              <div className="min-w-0 space-y-5">
-                <form
-                  onSubmit={investigate}
-                  className="panel p-5 shadow-[0_3px_16px_-12px_#425d49]"
-                >
-                  <label
-                    htmlFor="question"
-                    className="flex items-center gap-2 text-xs font-medium text-stone-700"
+        ) : null}
+        {view === "investigate" && agent ? (
+          <div className="investigation-layout">
+            <main className="investigation-main">
+              <div className="investigation-toolbar">
+                <div>
+                  <span
+                    className={`agent-avatar small ${agent.id === "customers" ? "blue" : "purple"}`}
                   >
-                    <MessageSquare size={14} className="text-forest-600" /> Ask{" "}
-                    {displayName(agent).toLowerCase()}
+                    {agent.id === "customers" ? (
+                      <Users size={14} />
+                    ) : (
+                      <Activity size={14} />
+                    )}
+                  </span>
+                  <strong>{displayName(agent)}</strong>
+                  <span className="subtle-badge">
+                    {agent.ready ? "Ready" : "Setup required"}
+                  </span>
+                </div>
+                <button
+                  className="icon-button"
+                  aria-label="New investigation"
+                  disabled={busy}
+                  onClick={newInvestigation}
+                >
+                  <Plus size={17} />
+                </button>
+              </div>
+              <div
+                className={`conversation ${!run && !busy ? "conversation-empty" : ""}`}
+              >
+                {!run && !busy ? (
+                  <div className="investigation-welcome fade-in">
+                    <span className="welcome-symbol">
+                      <GitBranch size={28} strokeWidth={1.6} />
+                    </span>
+                    <p className="eyebrow">YOUR DATA. WITH CONTEXT.</p>
+                    <h1>
+                      What would you like
+                      <br />
+                      to understand?
+                    </h1>
+                    <p>
+                      Ask {displayName(agent).toLowerCase()} a question.
+                      <br />
+                      Trace every answer back to your data.
+                    </p>
+                    <button
+                      className="suggested-question"
+                      onClick={() => {
+                        setQuestion(
+                          agent.demo_question ||
+                            `What can you tell me about ${agent.name}? Start with the available business definitions.`,
+                        );
+                        questionInput.current?.focus();
+                      }}
+                    >
+                      <span>
+                        <Sparkles size={14} />
+                        {mode === "demo"
+                          ? "TRY THE EXAMPLE"
+                          : "START AN INVESTIGATION"}
+                      </span>
+                      <strong>
+                        {agent.demo_question ||
+                          `Explore the business definitions available to ${displayName(agent).toLowerCase()}.`}
+                      </strong>
+                      <ArrowRight size={16} />
+                    </button>
+                    <div className="welcome-links">
+                      <button onClick={() => setView("catalog")}>
+                        <BookOpen size={14} />
+                        Browse definitions
+                      </button>
+                      <button onClick={() => setView("integrations")}>
+                        <Braces size={14} />
+                        Connect your stack
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {busy ? (
+                  <div role="status" className="investigating-state">
+                    <Loader2 size={24} className="animate-spin" />
+                    <h2>Investigating your question</h2>
+                    <p>
+                      Reading business definitions and querying permitted data.
+                    </p>
+                    <span>Results and supporting SQL will appear here.</span>
+                  </div>
+                ) : null}
+                {run ? (
+                  <div className="answer-thread fade-in">
+                    <div className="question-bubble">{run.question}</div>
+                    <section className="answer-section">
+                      <div className="answer-heading">
+                        <span className="brand-icon">
+                          <GitBranch size={16} />
+                        </span>
+                        <h2>What the data tells us</h2>
+                        <span className="subtle-badge">
+                          <Check size={11} />
+                          {run.answer.status.replaceAll("_", " ")}
+                        </span>
+                      </div>
+                      <Explanation
+                        text={run.answer.explanation}
+                        onCitation={selectCitation}
+                      />
+                      {run.answer.query_ids.length ? (
+                        <div className="answer-sources">
+                          {run.answer.query_ids.map((id) => (
+                            <button key={id} onClick={() => selectCitation(id)}>
+                              <Database size={12} />
+                              {id}
+                              <ArrowUpRight size={12} />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      {run.answer.definitions.length ? (
+                        <div className="definition-note">
+                          <BookOpen size={15} />
+                          <div>
+                            <strong>Definitions used</strong>
+                            {run.answer.definitions.map((item, i) => (
+                              <p key={i}>{item}</p>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {run.answer.limitations.length ? (
+                        <details className="answer-limitations" open>
+                          <summary>Assumptions & limitations</summary>
+                          <ul>
+                            {run.answer.limitations.map((item, i) => (
+                              <li key={i}>{item}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
+                      <div className="answer-footer">
+                        <span>
+                          {run.queries.length} queries · {run.actions.length}{" "}
+                          actions
+                        </span>
+                        <button
+                          onClick={() =>
+                            downloadJson(run, `semtrail-${run.run_id}.json`)
+                          }
+                        >
+                          <ArrowDownToLine size={13} />
+                          Export run
+                        </button>
+                      </div>
+                    </section>
+                    <details className="activity-details">
+                      <summary>
+                        <Activity size={14} />
+                        Investigation activity
+                        <span>{run.actions.length} actions</span>
+                      </summary>
+                      <ol>
+                        {run.actions.map((action, i) => (
+                          <li key={i}>
+                            <CircleDot size={11} />
+                            <code>{action.tool}</code>
+                            <span>{action.status}</span>
+                            {action.query_id ? (
+                              <button
+                                onClick={() => selectCitation(action.query_id!)}
+                              >
+                                {action.query_id}
+                              </button>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  </div>
+                ) : null}
+              </div>
+              <div className="composer-area">
+                <form className="question-composer" onSubmit={investigate}>
+                  <label htmlFor="question" className="sr-only">
+                    Ask {displayName(agent).toLowerCase()}
                   </label>
                   <textarea
+                    ref={questionInput}
                     id="question"
                     value={question}
                     onChange={(event) => setQuestion(event.target.value)}
-                    placeholder="What would you like to understand about your business?"
+                    onKeyDown={(event) => {
+                      if (
+                        (event.metaKey || event.ctrlKey) &&
+                        event.key === "Enter"
+                      ) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder="Ask a question about your data…"
                     rows={3}
                     maxLength={10000}
                     disabled={busy || !agent.ready}
-                    className="mt-3 w-full resize-y border-0 bg-transparent py-2 text-sm leading-7 placeholder:text-stone-400 focus:outline-none disabled:opacity-60"
                   />
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-4">
-                    <span className="flex items-center gap-1.5 text-[11px] text-stone-400">
+                  <div className="composer-toolbar">
+                    <span>
                       <ShieldCheck size={13} />
-                      {agent.model_count} permitted models · Read-only
+                      Read-only · {agent.model_count} permitted models
                     </span>
                     <button
                       className="primary-button"
@@ -414,418 +597,338 @@ export default function App() {
                       {busy ? "Investigating…" : "Investigate"}
                     </button>
                   </div>
-                  {!agent.ready ? (
-                    <button
-                      type="button"
-                      className="mt-3 text-xs text-forest-700 underline"
-                      onClick={() => setView("integrations")}
-                    >
-                      Configure a model and API key to begin →
-                    </button>
-                  ) : null}
                 </form>
-                {busy ? (
-                  <div
-                    role="status"
-                    className="panel flex items-center gap-4 p-6"
+                {!agent.ready ? (
+                  <button
+                    className="setup-prompt"
+                    onClick={() => setView("integrations")}
                   >
-                    <Loader2
-                      size={20}
-                      className="animate-spin text-forest-600"
-                    />
-                    <div>
-                      <p className="text-sm font-medium">
-                        Following the evidence…
-                      </p>
-                      <p className="mt-1 text-xs leading-6 text-stone-500">
-                        Inspecting definitions and querying permitted data. This
-                        can take several model calls.
-                      </p>
-                    </div>
-                  </div>
+                    Configure a model and API key to begin →
+                  </button>
                 ) : null}
-                {!run && !busy ? (
-                  <div className="py-7">
-                    <div className="mb-5 flex items-center gap-2 text-xs text-stone-500">
-                      <Sparkles size={14} /> A good place to start
-                    </div>
-                    <button
-                      onClick={() =>
-                        setQuestion(
-                          agent.demo_question ||
-                            `What can you tell me about ${agent.name}? Start with the available business definitions.`,
-                        )
-                      }
-                      className="group panel flex w-full items-center justify-between gap-4 p-5 text-left transition hover:border-forest-100 hover:bg-forest-50/40"
-                    >
-                      <div>
-                        <p className="text-[13px] font-medium">
-                          {agent.demo_question ||
-                            `Explore the business definitions available to ${displayName(agent).toLowerCase()}.`}
-                        </p>
-                        <p className="mt-2 text-xs text-stone-400">
-                          Understand the numbers and see how they were
-                          calculated.
-                        </p>
-                      </div>
-                      <ArrowRight
-                        size={17}
-                        className="shrink-0 text-forest-600 transition group-hover:translate-x-1"
-                      />
-                    </button>
-                    <div className="mt-9 grid gap-5 sm:grid-cols-3">
-                      {[
-                        {
-                          icon: BookOpen,
-                          title: "Business meaning first",
-                          text: "Definitions and model grain come directly from dbt.",
-                        },
-                        {
-                          icon: ShieldCheck,
-                          title: "A deliberate data scope",
-                          text: "Tag policies are checked before every query runs.",
-                        },
-                        {
-                          icon: GitBranch,
-                          title: "A trail you can follow",
-                          text: "Inspect the SQL and results supporting each answer.",
-                        },
-                      ].map((item) => (
-                        <div key={item.title}>
-                          <item.icon
-                            size={18}
-                            className="mb-3 text-stone-400"
-                          />
-                          <h3 className="text-xs font-medium text-stone-600">
-                            {item.title}
-                          </h3>
-                          <p className="mt-2 text-[11px] leading-5 text-stone-400">
-                            {item.text}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {run ? (
-                  <div className="space-y-5 fade-in">
-                    <section className="panel p-6">
-                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-forest-50 text-forest-700">
-                            <Sparkles size={15} />
-                          </span>
-                          <h2 className="text-sm font-semibold">
-                            What the data tells us
-                          </h2>
-                        </div>
-                        <span className="pill">
-                          <Check size={11} />
-                          {run.answer.status.replaceAll("_", " ")}
-                        </span>
-                      </div>
-                      <p className="mb-4 border-l-2 border-stone-200 pl-3 text-xs italic leading-6 text-stone-400">
-                        {run.question}
-                      </p>
-                      <Explanation
-                        text={run.answer.explanation}
-                        onCitation={setQueryId}
-                      />
-                      {run.answer.definitions.length ? (
-                        <div className="mt-5 rounded-xl bg-forest-50/70 p-4">
-                          <p className="label mb-2 text-forest-600">
-                            Definitions used
-                          </p>
-                          {run.answer.definitions.map((item, i) => (
-                            <p
-                              key={i}
-                              className="text-xs leading-6 text-forest-700"
-                            >
-                              {item}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
-                      {run.answer.limitations.length ? (
-                        <details className="mt-5 text-xs text-stone-500" open>
-                          <summary className="cursor-pointer font-medium">
-                            Assumptions & limitations
-                          </summary>
-                          <ul className="mt-2 list-disc space-y-1 pl-4 leading-6">
-                            {run.answer.limitations.map((item, i) => (
-                              <li key={i}>{item}</li>
-                            ))}
-                          </ul>
-                        </details>
-                      ) : null}
-                    </section>
-                    <EvidencePanel
-                      run={run}
-                      selected={queryId}
-                      onSelect={setQueryId}
-                    />
-                    <details className="px-1 text-xs text-stone-400">
-                      <summary className="cursor-pointer">
-                        Investigation activity · {run.actions.length} actions
-                      </summary>
-                      <ol className="mt-3 space-y-2 border-l border-stone-200 pl-4">
-                        {run.actions.map((action, i) => (
-                          <li key={i} className="flex items-center gap-2">
-                            <CircleDot size={11} />
-                            <span className="font-mono">{action.tool}</span>
-                            <span>{action.status}</span>
-                            {action.query_id ? (
-                              <button
-                                className="text-forest-600"
-                                onClick={() => setQueryId(action.query_id!)}
-                              >
-                                {action.query_id}
-                              </button>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ol>
-                    </details>
-                  </div>
-                ) : null}
+                <p className="composer-hint">
+                  {mode === "demo"
+                    ? "Demo uses synthetic data and scripted decisions. Try the example question."
+                    : "Answers include supporting queries. Review the evidence before acting."}
+                  <span>⌘ / Ctrl + Enter</span>
+                </p>
               </div>
-              <aside className="space-y-4">
-                <section className="panel p-5">
-                  <p className="label mb-4">Agent context</p>
-                  <div className="mb-4 flex items-center gap-2.5">
-                    <span className="rounded-lg bg-forest-50 p-2 text-forest-600">
+            </main>
+            <aside id="investigation-inspector" className="inspector">
+              <div
+                className="inspector-tabs"
+                role="group"
+                aria-label="Investigation details"
+              >
+                <button
+                  aria-pressed={inspector === "scope"}
+                  onClick={() => setInspector("scope")}
+                >
+                  <Layers3 size={14} />
+                  Agent context
+                </button>
+                <button
+                  aria-pressed={inspector === "evidence"}
+                  onClick={() => setInspector("evidence")}
+                >
+                  <Database size={14} />
+                  Evidence<span>{run?.queries.length || 0}</span>
+                </button>
+              </div>
+              {inspector === "evidence" ? (
+                run ? (
+                  <EvidencePanel
+                    run={run}
+                    selected={queryId}
+                    onSelect={setQueryId}
+                  />
+                ) : (
+                  <div className="inspector-empty">
+                    <Database size={25} strokeWidth={1.5} />
+                    <h3>No queries yet</h3>
+                    <p>
+                      Run an investigation to inspect the SQL, results, and
+                      definitions behind the answer.
+                    </p>
+                  </div>
+                )
+              ) : (
+                <div className="scope-content">
+                  <div className="scope-title">
+                    <span
+                      className={`agent-avatar ${agent.id === "customers" ? "blue" : "purple"}`}
+                    >
                       {agent.id === "customers" ? (
-                        <Users size={17} />
+                        <Users size={18} />
                       ) : (
-                        <Activity size={17} />
+                        <Activity size={18} />
                       )}
                     </span>
+                    <h2>{displayName(agent)}</h2>
+                    <span>Domain agent</span>
+                  </div>
+                  <p className="scope-description">{agent.instructions}</p>
+                  <div className="scope-counts">
+                    <button onClick={() => setView("catalog")}>
+                      <strong>{agent.model_count}</strong>
+                      <span>Models</span>
+                    </button>
+                    <button onClick={() => setView("catalog")}>
+                      <strong>{agent.metric_count}</strong>
+                      <span>Metrics</span>
+                    </button>
                     <div>
-                      <p className="text-xs font-semibold">
-                        {displayName(agent)}
-                      </p>
-                      <p className="mt-1 text-[10px] text-stone-400">
-                        Domain-specific data agent
-                      </p>
+                      <strong>{agent.max_queries}</strong>
+                      <span>Query limit</span>
                     </div>
                   </div>
-                  <p className="text-xs leading-6 text-stone-500">
-                    {agent.instructions}
-                  </p>
-                  <div className="my-5 h-px bg-stone-100" />
-                  <p className="label mb-3">Accessible domains</p>
-                  <div className="flex flex-wrap gap-2">
-                    {agent.policy.allow_tags_any.map((tag) => (
-                      <span
-                        key={tag}
-                        className="pill bg-forest-50 text-forest-700"
-                      >
-                        <span className="h-1 w-1 rounded-full bg-forest-500" />
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setView("catalog")}
-                    className="mt-5 flex items-center gap-2 text-xs font-medium text-forest-700"
-                  >
-                    Explore semantic catalog
-                    <ArrowUpRight size={13} />
-                  </button>
-                </section>
-                <section className="rounded-xl border border-dashed border-stone-300/70 p-5">
-                  <p className="label mb-4">Connected stack</p>
-                  <dl className="space-y-4 text-xs">
-                    {[
-                      {
-                        icon: GitBranch,
-                        title: "Semantics",
-                        value: "dbt artifacts",
-                      },
-                      {
-                        icon: Database,
-                        title: "Warehouse",
-                        value: agent.warehouse,
-                      },
-                      {
-                        icon: Sparkles,
-                        title: "Model",
-                        value:
-                          mode === "demo" ? "Offline fixture" : agent.provider,
-                      },
-                    ].map((item) => (
-                      <div
-                        key={item.title}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <dt className="flex items-center gap-2 text-stone-400">
-                          <item.icon size={13} />
-                          {item.title}
+                  <section className="scope-section">
+                    <h3>
+                      <ShieldCheck size={14} />
+                      Data access
+                    </h3>
+                    <p>
+                      Only models matching the permitted dbt tags can be
+                      queried.
+                    </p>
+                    <div className="tag-row">
+                      {agent.policy.allow_tags_any.map((tag) => (
+                        <span className="scope-tag" key={tag}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    {agent.policy.deny_tags.length ? (
+                      <div className="denied-tags">
+                        Excluded: {agent.policy.deny_tags.join(", ")}
+                      </div>
+                    ) : null}
+                    <span className="enforcement-note">
+                      <Check size={12} />
+                      Enforced at query execution
+                    </span>
+                  </section>
+                  <section className="scope-section">
+                    <h3>
+                      <Database size={14} />
+                      Connected sources
+                    </h3>
+                    <dl className="connection-list">
+                      <div>
+                        <dt>
+                          <GitBranch size={14} />
+                          Semantics
                         </dt>
-                        <dd className="font-medium text-stone-600">
-                          {item.value}
+                        <dd>dbt artifacts</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <Database size={14} />
+                          Warehouse
+                        </dt>
+                        <dd>{agent.warehouse}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <Sparkles size={14} />
+                          Model
+                        </dt>
+                        <dd>
+                          {mode === "demo" ? "Offline fixture" : agent.provider}
                         </dd>
                       </div>
-                    ))}
-                  </dl>
-                  <p className="mt-5 border-t border-stone-200/60 pt-4 text-[10px] leading-5 text-stone-400">
-                    Up to {agent.max_queries} queries and {agent.max_steps}{" "}
-                    model turns per investigation.
-                  </p>
-                </section>
-              </aside>
-            </div>
-          ) : null}
-
-          {view === "catalog" && agent ? (
-            <CatalogPanel catalog={catalog} agent={agent} />
-          ) : null}
-          {view === "history" ? (
-            <section className="panel overflow-hidden fade-in">
-              <div className="border-b border-stone-100 px-6 py-4 text-xs font-medium">
-                Recent investigations{" "}
-                <span className="ml-2 pill">{runs.length}</span>
-              </div>
-              {runs.length ? (
-                runs.map((item) => (
-                  <button
-                    key={item.run_id}
-                    onClick={() => openRun(item)}
-                    className="flex w-full items-center gap-4 border-b border-stone-100 px-6 py-5 text-left transition last:border-b-0 hover:bg-stone-50"
-                  >
-                    <span className="rounded-lg bg-forest-50 p-2 text-forest-600">
-                      <GitBranch size={16} />
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium capitalize">
-                        {item.agent} investigation
-                      </p>
-                      <p className="mt-1 text-[11px] text-stone-400">
-                        {new Date(item.created_at).toLocaleString()} ·{" "}
-                        <span className="font-mono">
-                          {item.run_id.slice(0, 10)}
-                        </span>
-                      </p>
+                    </dl>
+                  </section>
+                  <section className="scope-section">
+                    <div className="scope-section-title">
+                      <h3>Available models</h3>
+                      <button
+                        aria-label="Open semantic catalog"
+                        onClick={() => setView("catalog")}
+                      >
+                        <ArrowUpRight size={14} />
+                      </button>
                     </div>
-                    <ArrowRight size={15} className="text-stone-400" />
+                    {catalog?.models.map((model) => (
+                      <button
+                        className="model-link"
+                        key={model.id}
+                        onClick={() => setView("catalog")}
+                      >
+                        <Layers3 size={14} />
+                        <span>{model.name}</span>
+                        <ChevronRight size={13} />
+                      </button>
+                    ))}
+                  </section>
+                  <button
+                    className="catalog-link"
+                    onClick={() => setView("catalog")}
+                  >
+                    Explore semantic catalog
+                    <ArrowRight size={14} />
                   </button>
-                ))
-              ) : (
-                <div className="p-10 text-center text-sm text-stone-400">
-                  Your first investigation will appear here with its complete
-                  evidence trail.
                 </div>
               )}
-            </section>
-          ) : null}
-          {view === "integrations" ? (
-            <div className="grid gap-5 fade-in lg:grid-cols-2">
-              <section className="panel p-6">
-                <Terminal size={20} className="mb-4 text-forest-600" />
-                <h2 className="text-sm font-semibold">
-                  Connect your own stack
-                </h2>
-                <p className="my-3 text-xs leading-6 text-stone-500">
-                  Configure a local agent YAML with dbt artifact paths, a
-                  read-only database connection, and your preferred provider.
-                  Keys stay in environment variables on your compute.
-                </p>
-                <CodeBlock
-                  text={`pip install -e '.[server,postgres,openai]'\nexport OPENAI_API_KEY=your-key\nexport SEMTRAIL_REVENUE_DATABASE_URL=your-dsn\nsemtrail serve --agents /srv/agents`}
-                />
-                <a
-                  className="mt-4 inline-flex items-center gap-1 text-xs text-forest-700"
-                  href="https://github.com/jonathantiedchen/semtrail#connect-your-dbt-repository-and-database"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Read the setup guide
-                  <ArrowUpRight size={12} />
-                </a>
-              </section>
-              <section className="panel p-6">
-                <Braces size={20} className="mb-4 text-forest-600" />
-                <h2 className="text-sm font-semibold">
-                  An API for your workflows
-                </h2>
-                <p className="my-3 text-xs leading-6 text-stone-500">
-                  Embed governed investigations in internal tools, notebooks and
-                  automation. Every response includes the explanation,
-                  supporting SQL and bounded results.
-                </p>
-                <CodeBlock
-                  text={`POST /api/agents/revenue/investigations\nContent-Type: application/json\n\n{ "question": "What is revenue by country?" }`}
-                />
-                <a
-                  href="/docs"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-flex items-center gap-1 text-xs text-forest-700"
-                >
-                  Explore OpenAPI documentation
-                  <ArrowUpRight size={12} />
-                </a>
-              </section>
-              <section className="panel p-6">
-                <Settings2 size={20} className="mb-4 text-forest-600" />
-                <h2 className="text-sm font-semibold">
-                  Use agents from MCP clients
-                </h2>
-                <p className="my-3 text-xs leading-6 text-stone-500">
-                  Let compatible AI tools discover domain agents, inspect
-                  permitted semantics, run an investigation and retrieve its
-                  evidence through stdio MCP.
-                </p>
-                <CodeBlock
-                  text={`pip install -e '.[mcp,openai]'\nsemtrail mcp --agents /srv/agents`}
-                />
-                <p className="mt-4 text-[11px] leading-5 text-stone-400">
-                  The same runtime and access policy serve the UI, API and MCP
-                  tools.
-                </p>
-              </section>
-              <section className="panel p-6">
-                <ArrowDownToLine size={20} className="mb-4 text-forest-600" />
-                <h2 className="text-sm font-semibold">
-                  Evidence you can take with you
-                </h2>
-                <p className="my-3 text-xs leading-6 text-stone-500">
-                  Export investigation JSON for reviews, notebooks and
-                  reproducible handoffs. Each run includes an artifact
-                  fingerprint, effective model scope, exact SQL and actual query
-                  results.
-                </p>
-                <button
-                  disabled={!run}
-                  className="quiet-button mt-3"
-                  onClick={() =>
-                    run && downloadJson(run, `semtrail-${run.run_id}.json`)
-                  }
-                >
-                  <ArrowDownToLine size={13} />
-                  Export current investigation
-                </button>
-                <p className="mt-4 text-[11px] leading-5 text-stone-400">
-                  Evidence may contain sensitive data. Store and share it
-                  according to your policies.
-                </p>
-              </section>
+            </aside>
+          </div>
+        ) : null}
+        {view !== "investigate" ? (
+          <main className="secondary-content">
+            <div className="page-heading">
+              <h1>{titles[view][0]}</h1>
+              <p>{titles[view][1]}</p>
             </div>
-          ) : null}
-          {!agents.length && !error ? (
-            <div className="panel p-8 text-sm text-stone-500">
-              No agents configured. Add YAML files to the server’s agent
-              directory, then reload.
-            </div>
-          ) : null}
-          <footer className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200/70 pt-5 text-[10px] text-stone-400">
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck size={12} />
-              Grounded in dbt. Backed by evidence.
-            </span>
-            <span>Semtrail · Open-source data agents</span>
-          </footer>
-        </main>
+            {view === "catalog" && agent ? (
+              <CatalogPanel catalog={catalog} agent={agent} />
+            ) : null}
+            {view === "history" ? (
+              <section className="panel overflow-hidden fade-in">
+                <div className="border-b border-stone-100 px-6 py-4 text-xs font-medium">
+                  Recent investigations{" "}
+                  <span className="ml-2 pill">{runs.length}</span>
+                </div>
+                {runs.length ? (
+                  runs.map((item) => (
+                    <button
+                      key={item.run_id}
+                      onClick={() => openRun(item)}
+                      className="flex w-full items-center gap-4 border-b border-stone-100 px-6 py-5 text-left transition last:border-b-0 hover:bg-stone-50"
+                    >
+                      <span className="rounded-lg bg-forest-50 p-2 text-forest-600">
+                        <GitBranch size={16} />
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium capitalize">
+                          {item.agent} investigation
+                        </p>
+                        <p className="mt-1 text-[11px] text-stone-400">
+                          {new Date(item.created_at).toLocaleString()} ·{" "}
+                          <span className="font-mono">
+                            {item.run_id.slice(0, 10)}
+                          </span>
+                        </p>
+                      </div>
+                      <ArrowRight size={15} className="text-stone-400" />
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-10 text-center text-sm text-stone-400">
+                    Your first investigation will appear here with its complete
+                    evidence trail.
+                  </div>
+                )}
+              </section>
+            ) : null}
+            {view === "integrations" ? (
+              <div className="grid gap-5 fade-in lg:grid-cols-2">
+                <section className="panel p-6">
+                  <Terminal size={20} className="mb-4 text-forest-600" />
+                  <h2 className="text-sm font-semibold">
+                    Connect your own stack
+                  </h2>
+                  <p className="my-3 text-xs leading-6 text-stone-500">
+                    Configure a local agent YAML with dbt artifact paths, a
+                    read-only database connection, and your preferred provider.
+                    Keys stay in environment variables on your compute.
+                  </p>
+                  <CodeBlock
+                    text={`pip install -e '.[server,postgres,openai]'\nexport OPENAI_API_KEY=your-key\nexport SEMTRAIL_REVENUE_DATABASE_URL=your-dsn\nsemtrail serve --agents /srv/agents`}
+                  />
+                  <a
+                    className="mt-4 inline-flex items-center gap-1 text-xs text-forest-700"
+                    href="https://github.com/jonathantiedchen/semtrail#connect-your-dbt-repository-and-database"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Read the setup guide
+                    <ArrowUpRight size={12} />
+                  </a>
+                </section>
+                <section className="panel p-6">
+                  <Braces size={20} className="mb-4 text-forest-600" />
+                  <h2 className="text-sm font-semibold">
+                    An API for your workflows
+                  </h2>
+                  <p className="my-3 text-xs leading-6 text-stone-500">
+                    Embed governed investigations in internal tools, notebooks
+                    and automation. Every response includes the explanation,
+                    supporting SQL and bounded results.
+                  </p>
+                  <CodeBlock
+                    text={`POST /api/agents/revenue/investigations\nContent-Type: application/json\n\n{ "question": "What is revenue by country?" }`}
+                  />
+                  <a
+                    href="/docs"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 inline-flex items-center gap-1 text-xs text-forest-700"
+                  >
+                    Explore OpenAPI documentation
+                    <ArrowUpRight size={12} />
+                  </a>
+                </section>
+                <section className="panel p-6">
+                  <Settings2 size={20} className="mb-4 text-forest-600" />
+                  <h2 className="text-sm font-semibold">
+                    Use agents from MCP clients
+                  </h2>
+                  <p className="my-3 text-xs leading-6 text-stone-500">
+                    Let compatible AI tools discover domain agents, inspect
+                    permitted semantics, run an investigation and retrieve its
+                    evidence through stdio MCP.
+                  </p>
+                  <CodeBlock
+                    text={`pip install -e '.[mcp,openai]'\nsemtrail mcp --agents /srv/agents`}
+                  />
+                  <p className="mt-4 text-[11px] leading-5 text-stone-400">
+                    The same runtime and access policy serve the UI, API and MCP
+                    tools.
+                  </p>
+                </section>
+                <section className="panel p-6">
+                  <ArrowDownToLine size={20} className="mb-4 text-forest-600" />
+                  <h2 className="text-sm font-semibold">
+                    Evidence you can take with you
+                  </h2>
+                  <p className="my-3 text-xs leading-6 text-stone-500">
+                    Export investigation JSON for reviews, notebooks and
+                    reproducible handoffs. Each run includes an artifact
+                    fingerprint, effective model scope, exact SQL and actual
+                    query results.
+                  </p>
+                  <button
+                    disabled={!run}
+                    className="quiet-button mt-3"
+                    onClick={() =>
+                      run && downloadJson(run, `semtrail-${run.run_id}.json`)
+                    }
+                  >
+                    <ArrowDownToLine size={13} />
+                    Export current investigation
+                  </button>
+                  <p className="mt-4 text-[11px] leading-5 text-stone-400">
+                    Evidence may contain sensitive data. Store and share it
+                    according to your policies.
+                  </p>
+                </section>
+              </div>
+            ) : null}
+            {!agents.length && !error ? (
+              <div className="panel p-8 text-sm text-stone-500">
+                No agents configured. Add YAML files to the server’s agent
+                directory, then reload.
+              </div>
+            ) : null}
+          </main>
+        ) : null}
+        {view === "investigate" && !agents.length ? (
+          <div className="empty-workspace">
+            {error
+              ? "Connect to your server to load agents."
+              : "Loading workspace…"}
+          </div>
+        ) : null}
       </div>
       {showAccess ? (
         <div

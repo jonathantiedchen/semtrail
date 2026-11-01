@@ -110,3 +110,35 @@ test("shows permitted semantics through the catalog navigation", async () => {
     screen.getByText("Scope is enforced at data access."),
   ).toBeInTheDocument();
 });
+
+test("switches between context and query evidence without losing the answer", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByLabelText("Ask revenue analyst");
+  await user.click(screen.getByRole("button", { name: "Run investigation" }));
+  await screen.findByRole("heading", { name: "Query evidence" });
+  await user.click(
+    screen.getByRole("button", { name: "Agent context" }),
+  );
+  expect(screen.getByText("Enforced at query execution")).toBeInTheDocument();
+  expect(screen.getByText("What the data tells us")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /^Evidence/ }));
+  expect(screen.getByText("700")).toBeInTheDocument();
+});
+
+test("filters the semantic catalog and explains empty search results", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByLabelText("Ask revenue analyst");
+  await user.click(screen.getByRole("button", { name: "Semantic catalog" }));
+  const search = await screen.findByRole("textbox", {
+    name: "Search models and metrics",
+  });
+  await user.type(search, "nonexistent");
+  expect(screen.getByText(/No models or metrics match/)).toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "revenue" }),
+  ).not.toBeInTheDocument();
+  await user.clear(search);
+  expect(screen.getByRole("heading", { name: "revenue" })).toBeInTheDocument();
+});

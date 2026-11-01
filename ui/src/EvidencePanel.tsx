@@ -1,21 +1,13 @@
 import { useState } from "react";
-import {
-  Check,
-  ChevronRight,
-  Clipboard,
-  Code2,
-  Download,
-  Table2,
-} from "lucide-react";
+import { Check, Clipboard, Code2, Table2 } from "lucide-react";
 import type { Query, Run } from "./types";
-import { downloadJson } from "./api";
 
 export function CodeBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="relative rounded-xl bg-[#172923] p-4 text-xs text-emerald-50">
+    <div className="code-block relative rounded-xl bg-[#222b40] p-4 text-xs text-slate-100">
       <button
-        className="absolute right-3 top-3 rounded p-1.5 text-emerald-100/60 hover:bg-white/10"
+        className="absolute right-3 top-3 rounded p-1.5 text-slate-300 hover:bg-white/10"
         aria-label="Copy code"
         onClick={async () => {
           try {
@@ -110,36 +102,20 @@ export default function EvidencePanel({
     run.queries.find((query) => query.query_id === selected) || run.queries[0];
   return (
     <section
-      className="panel overflow-hidden"
+      className="evidence-panel overflow-hidden"
       aria-label="Supporting query evidence"
     >
-      <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="rounded-lg bg-forest-50 p-2 text-forest-700">
-            <Code2 size={16} />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold">The evidence trail</h3>
-            <p className="mt-0.5 text-[11px] text-stone-400">
-              Executed queries. Actual results.
-            </p>
-          </div>
-        </div>
-        <button
-          className="quiet-button"
-          onClick={() => downloadJson(run, `semtrail-${run.run_id}.json`)}
-        >
-          <Download size={13} /> Export run
-        </button>
+      <div className="evidence-header">
+        <h3>Query evidence</h3>
+        <p>Executed SQL and actual results for this run.</p>
       </div>
-      <div className="grid lg:grid-cols-[185px_minmax(0,1fr)]">
-        <div className="border-b border-stone-100 bg-stone-50/50 p-3 lg:border-b-0 lg:border-r">
+      <div>
+        <div className="query-list">
           {run.queries.map((item) => (
             <button
               key={item.query_id}
               aria-pressed={query?.query_id === item.query_id}
               onClick={() => onSelect(item.query_id)}
-              className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-xs transition ${query?.query_id === item.query_id ? "bg-white font-medium text-forest-700 shadow-sm ring-1 ring-stone-200" : "text-stone-500 hover:bg-white"}`}
             >
               <span>
                 <span className="font-mono">{item.query_id}</span>
@@ -147,7 +123,6 @@ export default function EvidencePanel({
                   {item.kind === "dbt_metric" ? "dbt metric" : "Exploration"}
                 </span>
               </span>
-              <ChevronRight size={13} />
             </button>
           ))}
           {run.queries.length === 0 ? (
@@ -155,7 +130,7 @@ export default function EvidencePanel({
           ) : null}
         </div>
         {query ? (
-          <div className="min-w-0 p-5">
+          <div className="evidence-content min-w-0">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div
                 className="flex rounded-lg bg-stone-100 p-1"
