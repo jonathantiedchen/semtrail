@@ -2075,7 +2075,7 @@ select:focus-visible {
   width: 100%;
 }
 .main-nav button:first-child {
-  display: none;
+  display: flex;
 }
 .workspace-name {
   display: none;
