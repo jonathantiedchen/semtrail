@@ -1,0 +1,75 @@
+version: 2
+models:
+  - name: time_spine
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+  - name: completed_orders
+    description: |
+      One row per completed order, excluding cancellations.
+      All amounts are in USD. Revenue is the sum of completed order value.
+    columns:
+      - name: order_id
+        description: Unique completed order identifier.
+        data_tests: [unique, not_null]
+      - name: country
+        description: Customer billing country.
+      - name: amount
+        description: Completed order value in USD.
+      - name: ordered_at
+        description: Date the order was placed.
+  - name: customers
+    description: One row per customer, including inactive customers.
+    columns:
+      - name: customer_id
+        description: Unique customer identifier.
+        data_tests: [unique, not_null]
+      - name: segment
+        description: Customer market segment.
+  - name: payroll
+    description: Sensitive payroll data. Not available to the example agents.
+    columns:
+      - name: salary
+        description: Restricted payroll data.
+
+semantic_models:
+  - name: orders
+    description: Completed orders; cancellations are excluded in the underlying model.
+    model: ref('completed_orders')
+    defaults:
+      agg_time_dimension: ordered_at
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+    dimensions:
+      - name: country
+        type: categorical
+        description: Customer billing country.
+      - name: ordered_at
+        type: time
+        type_params:
+          time_granularity: day
+    measures:
+      - name: order_value
+        agg: sum
+        expr: amount
+      - name: order_count
+        agg: count
+        expr: '1'
+
+metrics:
+  - name: revenue
+    label: Completed revenue
+    description: Completed order revenue in USD; excludes cancellations.
+    type: simple
+    type_params:
+      measure: order_value
+  - name: orders
+    label: Completed orders
+    description: Number of completed orders.
+    type: simple
+    type_params:
+      measure: order_count

@@ -1,0 +1,14 @@
+.git
+.venv
+.semtrail
+.env
+**/__pycache__
+**/.pytest_cache
+dist
+build
+*.duckdb
+**/target
+**/logs
+**/node_modules
+**/*.tsbuildinfo
+src/semtrail/static

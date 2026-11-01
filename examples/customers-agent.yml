@@ -1,0 +1,17 @@
+name: customers
+instructions: |
+  Investigate customer composition and segment distributions.
+  Inspect the model grain before counting. Distinguish customers from active customers.
+  Use defined dbt metrics when available and label exploratory calculations.
+manifest: /srv/dbt/target/manifest.json
+policy:
+  allow_tags_any: [customers]
+  deny_tags: [sensitive]
+warehouse:
+  type: postgres
+  dsn_env: SEMTRAIL_CUSTOMERS_DATABASE_URL
+llm:
+  provider: anthropic
+  model: YOUR_MODEL
+  api_key_env: ANTHROPIC_API_KEY
+evidence_dir: /var/lib/semtrail/customers

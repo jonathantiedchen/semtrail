@@ -1,0 +1,47 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: semtrail
+          POSTGRES_DB: semtrail_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '${{ matrix.python }}'
+      - run: pip install -e '.[dev,server,mcp,postgres,openai,anthropic]'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci && npm run build && npm test
+        working-directory: ui
+      - run: ruff check .
+      - run: pytest
+        env:
+          SEMTRAIL_TEST_POSTGRES_DSN: postgresql://postgres:semtrail@localhost:5432/semtrail_test
+      - run: python -m build
+  dbt-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[dev,dbt-demo]'
+      - run: dbt seed --profiles-dir . && dbt build --profiles-dir .
+        working-directory: examples/shop
+      - run: pytest tests/test_dbt_artifacts.py
+        env:
+          SEMTRAIL_DBT_PROJECT: examples/shop

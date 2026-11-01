@@ -1,0 +1,22 @@
+name: revenue
+instructions: |
+  Investigate completed revenue using defined dbt metrics when available.
+  State grain, currency, assumptions and data coverage. Cite supporting queries.
+  Describe associations carefully; do not invent causal explanations.
+manifest: /srv/dbt/target/manifest.json
+semantic_manifest: /srv/dbt/target/semantic_manifest.json
+policy:
+  allow_tags_any: [finance]
+  deny_tags: [sensitive]
+warehouse:
+  type: postgres
+  dsn_env: SEMTRAIL_REVENUE_DATABASE_URL
+  timeout_seconds: 15
+  max_rows: 100
+llm:
+  provider: openai
+  model: YOUR_MODEL
+  api_key_env: OPENAI_API_KEY
+max_steps: 12
+max_queries: 6
+evidence_dir: /var/lib/semtrail/revenue

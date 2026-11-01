@@ -1,0 +1,8 @@
+semtrail_shop:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: semtrail_demo.duckdb
+      schema: marts
+      threads: 1

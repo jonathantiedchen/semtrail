@@ -1,0 +1,7 @@
+order_id,country,amount,ordered_at,status
+1,DE,120.00,2026-01-01,completed
+2,DE,80.00,2026-01-02,completed
+3,GB,150.00,2026-01-02,completed
+4,US,250.00,2026-01-03,completed
+5,US,100.00,2026-01-03,completed
+6,DE,999.00,2026-01-04,cancelled

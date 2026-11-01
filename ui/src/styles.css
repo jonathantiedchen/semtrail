@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --color-forest-50: #edf7f3;
+  --color-forest-100: #d7ebe1;
+  --color-forest-500: #328268;
+  --color-forest-600: #246e57;
+  --color-forest-700: #1c5746;
+  --color-forest-900: #153e36;
+}
+
+:root {
+  color: #24322e;
+  background: #f7f8f5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+body {
+  margin: 0;
+  min-width: 360px;
+}
+button,
+a,
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button,
+input,
+textarea {
+  outline-offset: 4px;
+}
+::selection {
+  background: #d7ebe1;
+}
+.panel {
+  @apply rounded-2xl border border-stone-200/80 bg-white;
+}
+.label {
+  @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500;
+}
+.quiet-button {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:bg-stone-50 disabled:opacity-50;
+}
+.primary-button {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-forest-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-forest-900 disabled:opacity-45;
+}
+.pill {
+  @apply inline-flex items-center gap-1.5 rounded-md bg-stone-100 px-2 py-1 text-[11px] font-medium text-stone-600;
+}
+.fade-in {
+  animation: appear 260ms ease-out;
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
+  .animate-spin {
+    animation: none;
+  }
+}
