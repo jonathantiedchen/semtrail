@@ -74,3 +74,21 @@ def test_demo_does_not_claim_to_answer_arbitrary_questions(service):
         )
         assert result.status_code == 400
         assert "example question" in result.json()["detail"]
+
+
+def test_chat_context_references_only_runs_from_same_agent(service):
+    with TestClient(create_app(service), base_url="http://localhost") as client:
+        first = client.post(
+            "/api/agents/revenue/investigations", json={"question": DEMO_QUESTIONS["revenue"]}
+        ).json()
+        second = client.post(
+            "/api/agents/revenue/investigations",
+            json={"question": DEMO_QUESTIONS["revenue"], "previous_run_ids": [first["run_id"]]},
+        )
+        assert second.status_code == 200
+        assert second.json()["previous_run_ids"] == [first["run_id"]]
+        denied = client.post(
+            "/api/agents/customers/investigations",
+            json={"question": DEMO_QUESTIONS["customers"], "previous_run_ids": [first["run_id"]]},
+        )
+        assert denied.status_code == 404

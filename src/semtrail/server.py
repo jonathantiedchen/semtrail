@@ -17,6 +17,7 @@ from semtrail.service import AgentService
 
 class Investigation(StrictModel):
     question: str = Field(min_length=1, max_length=10000)
+    previous_run_ids: list[str] = Field(default_factory=list, max_length=6)
 
 
 def create_app(
@@ -99,7 +100,7 @@ def create_app(
     def investigate(agent_id: str, body: Investigation):
         if not body.question.strip():
             raise HTTPException(422, "Question must not be empty.")
-        return service.investigate(agent_id, body.question)
+        return service.investigate(agent_id, body.question, previous_run_ids=body.previous_run_ids)
 
     @app.get("/api/runs")
     def runs():

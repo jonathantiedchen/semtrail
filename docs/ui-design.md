@@ -7,10 +7,11 @@ Its visual references include [Hex's BI interface](https://hex.tech/product/bi/)
 spacing, and visual hierarchy. Semtrail does not copy their branding or assets,
 and remains a small React and Tailwind application without a component-library dependency.
 
-The overview combines an investigation composer, domain agent selection, and
-recent runs. Warm paper surfaces, restrained sage and clay accents, serif titles,
-and monospace metadata distinguish content from controls. The investigation
-canvas has a collapsible context/evidence inspector. Catalog search, integrations,
+The main screen is a chat interface with a bottom composer, an agent selector,
+and chat history in the sidebar. Replies remain in the conversation. Follow-ups
+reference up to six prior saved responses, resolved by the server for the same agent. Warm paper surfaces, restrained sage and clay accents, serif titles,
+and monospace metadata distinguish content from controls. The chat
+canvas has an optional context/evidence inspector, closed by default. Catalog search, integrations,
 and saved-run access share the same shell.
 
 ## Evidence and charts
@@ -30,7 +31,7 @@ Database policies and the existing execution gate remain authoritative.
 ## Interaction and accessibility
 
 - Keyboard-accessible agent selection, navigation, chart citations, and inspector toggle.
-- Ctrl/Cmd+Enter submits the question; disabled states prevent duplicate submissions.
+- Ctrl/Cmd+Enter sends the message; disabled states prevent duplicate submissions.
 - All numeric chart values also appear as text. Animation honors reduced-motion preferences.
 - The inspector moves below the investigation on smaller screens; server access
   stays reachable on mobile.

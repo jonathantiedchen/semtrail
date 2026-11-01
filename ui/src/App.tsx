@@ -14,7 +14,6 @@ import {
   GitBranch,
   KeyRound,
   Layers3,
-  LayoutDashboard,
   PanelRight,
   Loader2,
   MessageSquare,
@@ -29,17 +28,15 @@ import {
 } from "lucide-react";
 import { api, downloadJson } from "./api";
 import type { Agent, Catalog, Run, RunSummary } from "./types";
-import WorkspaceHome from "./WorkspaceHome";
 import ResultVisuals from "./ResultVisuals";
 import CatalogPanel from "./CatalogPanel";
 import EvidencePanel, { CodeBlock } from "./EvidencePanel";
 
 type View = "overview" | "investigate" | "catalog" | "history" | "integrations";
 const navigation = [
-  { id: "overview" as const, title: "Overview", icon: LayoutDashboard },
-  { id: "investigate" as const, title: "Investigate", icon: MessageSquare },
+  { id: "investigate" as const, title: "Chat", icon: MessageSquare },
   { id: "catalog" as const, title: "Semantic catalog", icon: Layers3 },
-  { id: "history" as const, title: "Run history", icon: Clock3 },
+  { id: "history" as const, title: "Chat history", icon: Clock3 },
   { id: "integrations" as const, title: "Integrations", icon: Braces },
 ];
 const titles = {
@@ -49,7 +46,7 @@ const titles = {
   ],
   history: [
     "Run history",
-    "Reopen an investigation to inspect its answer, SQL, and results.",
+    "Reopen a chat to inspect its answer, SQL, and results.",
   ],
   integrations: [
     "Integrations",
@@ -88,11 +85,12 @@ export default function App() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<"scope" | "evidence">("scope");
   const questionInput = useRef<HTMLTextAreaElement>(null);
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>("investigate");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [previousMessages, setPreviousMessages] = useState<Run[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -102,6 +100,7 @@ export default function App() {
   const [tokenDraft, setTokenDraft] = useState("");
   const [showAccess, setShowAccess] = useState(false);
   const dialog = useRef<HTMLElement>(null);
+  const [evidenceRun, setEvidenceRun] = useState<Run | null>(null);
   const [queryId, setQueryId] = useState("q1");
   const agent = agents.find((agent) => agent.id === selected);
 
@@ -144,7 +143,7 @@ export default function App() {
           setMode(health.mode);
           setRuns(history);
           setSelected((previous) => previous || list[0]?.id || "");
-          setQuestion((previous) => previous || list[0]?.demo_question || "");
+
           setError("");
         }
       })
@@ -178,21 +177,36 @@ export default function App() {
     setView("investigate");
     setBusy(true);
     setError("");
+    if (run) setPreviousMessages((messages) => [...messages, run]);
     setRun(null);
     try {
       const result = await api<Run>(
         `/agents/${agent.id}/investigations`,
         token,
-        { method: "POST", body: JSON.stringify({ question }) },
+        {
+          method: "POST",
+          body: JSON.stringify({
+            question,
+            ...([...previousMessages, ...(run ? [run] : [])].length
+              ? {
+                  previous_run_ids: [...previousMessages, ...(run ? [run] : [])]
+                    .slice(-6)
+                    .map((item) => item.run_id),
+                }
+              : {}),
+          }),
+        },
       );
       setRun(result);
+      setEvidenceRun(result);
+      setQuestion("");
       setInspector("evidence");
-      setInspectorOpen(true);
+      setInspectorOpen(false);
       setQueryId(result.queries[0]?.query_id || "q1");
       setRuns(await api<RunSummary[]>("/runs", token));
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Investigation failed.",
+        reason instanceof Error ? reason.message : "Could not send message.",
       );
     } finally {
       setBusy(false);
@@ -205,12 +219,20 @@ export default function App() {
         `/agents/${item.agent_id}/runs/${item.run_id}`,
         token,
       );
+      const prior = await Promise.all(
+        (result.previous_run_ids || [])
+          .slice(-6)
+          .map((id) => api<Run>(`/agents/${item.agent_id}/runs/${id}`, token)),
+      );
+      setPreviousMessages(prior);
       setSelected(item.agent_id);
       setRun(result);
+      setEvidenceRun(result);
+      setQuestion("");
       setInspector("evidence");
-      setInspectorOpen(true);
+      setInspectorOpen(false);
       setQueryId(result.queries[0]?.query_id || "q1");
-      setQuestion(result.question);
+      setQuestion("");
       setView("investigate");
     } catch (reason) {
       setError(
@@ -221,10 +243,12 @@ export default function App() {
 
   function newInvestigation() {
     setRun(null);
+    setEvidenceRun(null);
+    setPreviousMessages([]);
     setError("");
-    setQuestion(agent?.demo_question || "");
+    setQuestion("");
     setInspector("scope");
-    setView("overview");
+    setView("investigate");
     setInspectorOpen(false);
   }
   function selectCitation(id: string) {
@@ -260,7 +284,7 @@ export default function App() {
           onClick={newInvestigation}
         >
           <Plus size={16} />
-          New investigation
+          New chat
         </button>
         <nav aria-label="Main navigation" className="main-nav">
           {navigation.map((item) => (
@@ -289,8 +313,9 @@ export default function App() {
               aria-pressed={selected === item.id}
               onClick={() => {
                 setSelected(item.id);
-                setQuestion(item.demo_question || "");
+                setQuestion("");
                 setRun(null);
+                setPreviousMessages([]);
                 setInspector("scope");
                 setView("investigate");
               }}
@@ -316,7 +341,7 @@ export default function App() {
         </div>
         {runs.length ? (
           <div className="sidebar-recent">
-            <div className="sidebar-heading">RECENT RUNS</div>
+            <div className="sidebar-heading">CHATS</div>
             {runs.slice(0, 3).map((item) => (
               <button
                 disabled={busy}
@@ -324,7 +349,7 @@ export default function App() {
                 onClick={() => openRun(item)}
               >
                 <MessageSquare size={13} />
-                <span>{item.agent} investigation</span>
+                <span>{item.agent} chat</span>
                 <ChevronRight size={12} />
               </button>
             ))}
@@ -385,26 +410,6 @@ export default function App() {
             </button>
           </div>
         ) : null}
-        {view === "overview" ? (
-          <WorkspaceHome
-            runs={runs}
-            agents={agents}
-            selected={selected}
-            question={question}
-            onQuestion={setQuestion}
-            onSelect={(item) => {
-              setSelected(item.id);
-              setQuestion(item.demo_question || "");
-              setRun(null);
-            }}
-            onSubmit={investigate}
-            onOpenRun={openRun}
-            onCatalog={() => setView("catalog")}
-            onHistory={() => setView("history")}
-            mode={mode}
-            busy={busy}
-          />
-        ) : null}
         {view === "investigate" && agent ? (
           <div
             className={`investigation-layout ${inspectorOpen ? "" : "inspector-closed"}`}
@@ -421,7 +426,25 @@ export default function App() {
                       <Activity size={14} />
                     )}
                   </span>
-                  <strong>{displayName(agent)}</strong>
+                  <label className="chat-agent-picker">
+                    <select
+                      aria-label="Chat agent"
+                      value={selected}
+                      disabled={busy}
+                      onChange={(event) => {
+                        setSelected(event.target.value);
+                        setRun(null);
+                        setPreviousMessages([]);
+                        setQuestion("");
+                      }}
+                    >
+                      {agents.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {displayName(item)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <span className="subtle-badge">
                     {agent.ready ? "Ready" : "Setup required"}
                   </span>
@@ -437,77 +460,43 @@ export default function App() {
                 </button>
               </div>
               <div
-                className={`conversation ${!run && !busy ? "conversation-empty" : ""}`}
+                className={`conversation ${!run && !busy && !previousMessages.length ? "conversation-empty" : ""}`}
               >
-                {!run && !busy ? (
+                {!run && !busy && !previousMessages.length ? (
                   <div className="investigation-welcome fade-in">
                     <span className="welcome-symbol">
-                      <GitBranch size={28} strokeWidth={1.6} />
+                      <GitBranch size={30} strokeWidth={1.5} />
                     </span>
-                    <p className="eyebrow">YOUR DATA. WITH CONTEXT.</p>
-                    <h1>
-                      Follow your curiosity.
-                      <br />
-                      <em>Find the evidence.</em>
-                    </h1>
-                    <p>
-                      Ask {displayName(agent).toLowerCase()} a question.
-                      <br />
-                      Trace every answer back to your data.
-                    </p>
+                    <h1>What’s on your mind?</h1>
+                    <p>Chat with your data. Get answers you can trace.</p>
                     <button
                       className="suggested-question"
                       onClick={() => {
                         setQuestion(
                           agent.demo_question ||
-                            `What can you tell me about ${agent.name}? Start with the available business definitions.`,
+                            "What business definitions are available?",
                         );
                         questionInput.current?.focus();
                       }}
                     >
+                      <Sparkles size={14} />
                       <span>
-                        <Sparkles size={14} />
-                        {mode === "demo"
-                          ? "TRY THE EXAMPLE"
-                          : "START AN INVESTIGATION"}
-                      </span>
-                      <strong>
                         {agent.demo_question ||
-                          `Explore the business definitions available to ${displayName(agent).toLowerCase()}.`}
-                      </strong>
-                      <ArrowRight size={16} />
+                          "Explore available business definitions"}
+                      </span>
+                      <ArrowRight size={14} />
                     </button>
-                    <div className="welcome-links">
-                      <button onClick={() => setView("catalog")}>
-                        <BookOpen size={14} />
-                        Browse definitions
-                      </button>
-                      <button onClick={() => setView("integrations")}>
-                        <Braces size={14} />
-                        Connect your stack
-                      </button>
-                    </div>
                   </div>
                 ) : null}
-                {busy ? (
-                  <div role="status" className="investigating-state">
-                    <Loader2 size={24} className="animate-spin" />
-                    <h2>Investigating your question</h2>
-                    <p>
-                      Reading business definitions and querying permitted data.
-                    </p>
-                    <span>Results and supporting SQL will appear here.</span>
-                  </div>
-                ) : null}
-                {run ? (
-                  <div className="answer-thread fade-in">
+                {[...previousMessages, ...(run ? [run] : [])].map((run) => (
+                  <div className="answer-thread fade-in" key={run.run_id}>
                     <div className="question-bubble">{run.question}</div>
                     <section className="answer-section">
                       <div className="answer-heading">
                         <span className="brand-icon">
                           <GitBranch size={16} />
                         </span>
-                        <h2>What the data tells us</h2>
+                        <h2>Semtrail</h2>
                         <span className="subtle-badge">
                           <Check size={11} />
                           {run.answer.status.replaceAll("_", " ")}
@@ -515,12 +504,23 @@ export default function App() {
                       </div>
                       <Explanation
                         text={run.answer.explanation}
-                        onCitation={selectCitation}
+                        onCitation={(id) => {
+                          setQueryId(id);
+                          setInspector("evidence");
+                          setInspectorOpen(true);
+                          setEvidenceRun(run);
+                        }}
                       />
                       {run.answer.query_ids.length ? (
                         <div className="answer-sources">
                           {run.answer.query_ids.map((id) => (
-                            <button key={id} onClick={() => selectCitation(id)}>
+                            <button
+                              key={id}
+                              onClick={() => {
+                                setEvidenceRun(run);
+                                selectCitation(id);
+                              }}
+                            >
                               <Database size={12} />
                               {id}
                               <ArrowUpRight size={12} />
@@ -530,7 +530,12 @@ export default function App() {
                       ) : null}
                       <ResultVisuals
                         queries={run.queries}
-                        onInspect={selectCitation}
+                        onInspect={(id) => {
+                          setQueryId(id);
+                          setInspector("evidence");
+                          setInspectorOpen(true);
+                          setEvidenceRun(run);
+                        }}
                       />
                       {run.answer.definitions.length ? (
                         <div className="definition-note">
@@ -571,7 +576,7 @@ export default function App() {
                     <details className="activity-details">
                       <summary>
                         <Activity size={14} />
-                        Investigation activity
+                        Response activity
                         <span>{run.actions.length} actions</span>
                       </summary>
                       <ol>
@@ -591,6 +596,16 @@ export default function App() {
                         ))}
                       </ol>
                     </details>
+                  </div>
+                ))}
+                {busy ? (
+                  <div role="status" className="investigating-state">
+                    <Loader2 size={24} className="animate-spin" />
+                    <h2>Thinking…</h2>
+                    <p>
+                      Reading business definitions and querying permitted data.
+                    </p>
+                    <span>Results and supporting SQL will appear here.</span>
                   </div>
                 ) : null}
               </div>
@@ -613,8 +628,8 @@ export default function App() {
                         event.currentTarget.form?.requestSubmit();
                       }
                     }}
-                    placeholder="Ask a question about your data…"
-                    rows={3}
+                    placeholder="Message Semtrail…"
+                    rows={2}
                     maxLength={10000}
                     disabled={busy || !agent.ready}
                   />
@@ -625,7 +640,7 @@ export default function App() {
                     </span>
                     <button
                       className="primary-button"
-                      aria-label="Run investigation"
+                      aria-label="Send message"
                       disabled={busy || !agent.ready || !question.trim()}
                     >
                       {busy ? (
@@ -633,7 +648,7 @@ export default function App() {
                       ) : (
                         <Send size={14} />
                       )}
-                      {busy ? "Investigating…" : "Investigate"}
+                      {busy ? "Thinking…" : "Send"}
                     </button>
                   </div>
                 </form>
@@ -661,7 +676,7 @@ export default function App() {
               <div
                 className="inspector-tabs"
                 role="group"
-                aria-label="Investigation details"
+                aria-label="Response details"
               >
                 <button
                   aria-pressed={inspector === "scope"}
@@ -679,9 +694,9 @@ export default function App() {
                 </button>
               </div>
               {inspector === "evidence" ? (
-                run ? (
+                evidenceRun || run ? (
                   <EvidencePanel
-                    run={run}
+                    run={(evidenceRun || run)!}
                     selected={queryId}
                     onSelect={setQueryId}
                   />
@@ -690,7 +705,7 @@ export default function App() {
                     <Database size={25} strokeWidth={1.5} />
                     <h3>No queries yet</h3>
                     <p>
-                      Run an investigation to inspect the SQL, results, and
+                      Send a message to inspect the SQL, results, and
                       definitions behind the answer.
                     </p>
                   </div>
@@ -828,8 +843,7 @@ export default function App() {
             {view === "history" ? (
               <section className="panel overflow-hidden fade-in">
                 <div className="border-b border-stone-100 px-6 py-4 text-xs font-medium">
-                  Recent investigations{" "}
-                  <span className="ml-2 pill">{runs.length}</span>
+                  Recent chats <span className="ml-2 pill">{runs.length}</span>
                 </div>
                 {runs.length ? (
                   runs.map((item) => (
@@ -843,7 +857,7 @@ export default function App() {
                       </span>
                       <div className="flex-1">
                         <p className="text-sm font-medium capitalize">
-                          {item.agent} investigation
+                          {item.agent} chat
                         </p>
                         <p className="mt-1 text-[11px] text-stone-400">
                           {new Date(item.created_at).toLocaleString()} ·{" "}
@@ -857,8 +871,8 @@ export default function App() {
                   ))
                 ) : (
                   <div className="p-10 text-center text-sm text-stone-400">
-                    Your first investigation will appear here with its complete
-                    evidence trail.
+                    Your first chat will appear here with its complete evidence
+                    trail.
                   </div>
                 )}
               </section>
@@ -894,8 +908,8 @@ export default function App() {
                     An API for your workflows
                   </h2>
                   <p className="my-3 text-xs leading-6 text-stone-500">
-                    Embed governed investigations in internal tools, notebooks
-                    and automation. Every response includes the explanation,
+                    Embed data conversations in internal tools, notebooks and
+                    automation. Every response includes the explanation,
                     supporting SQL and bounded results.
                   </p>
                   <CodeBlock
@@ -918,7 +932,7 @@ export default function App() {
                   </h2>
                   <p className="my-3 text-xs leading-6 text-stone-500">
                     Let compatible AI tools discover domain agents, inspect
-                    permitted semantics, run an investigation and retrieve its
+                    permitted semantics, ask a question and retrieve its
                     evidence through stdio MCP.
                   </p>
                   <CodeBlock
@@ -935,10 +949,9 @@ export default function App() {
                     Evidence you can take with you
                   </h2>
                   <p className="my-3 text-xs leading-6 text-stone-500">
-                    Export investigation JSON for reviews, notebooks and
-                    reproducible handoffs. Each run includes an artifact
-                    fingerprint, effective model scope, exact SQL and actual
-                    query results.
+                    Export response JSON for reviews, notebooks and reproducible
+                    handoffs. Each run includes an artifact fingerprint,
+                    effective model scope, exact SQL and actual query results.
                   </p>
                   <button
                     disabled={!run}
@@ -948,7 +961,7 @@ export default function App() {
                     }
                   >
                     <ArrowDownToLine size={13} />
-                    Export current investigation
+                    Export current response
                   </button>
                   <p className="mt-4 text-[11px] leading-5 text-stone-400">
                     Evidence may contain sensitive data. Store and share it

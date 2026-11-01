@@ -50,6 +50,7 @@ export interface Query {
   };
 }
 export interface Run {
+  previous_run_ids?: string[];
   run_id: string;
   agent: string;
   question: string;

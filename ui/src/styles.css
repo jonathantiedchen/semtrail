@@ -1897,3 +1897,280 @@ select:focus-visible {
     transform: none;
   }
 }
+
+/* Chat-first layout */
+.app-shell {
+  height: 100dvh;
+  min-height: 0;
+  grid-template-columns: 240px minmax(0, 1fr);
+  overflow: hidden;
+}
+.workspace-sidebar {
+  height: 100%;
+  background: #eeede8;
+}
+.workspace-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.workspace-header {
+  display: none;
+}
+.investigation-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+.investigation-main {
+  min-height: 0;
+  position: relative;
+}
+.investigation-toolbar {
+  flex-shrink: 0;
+  border: 0;
+  padding: 0 26px;
+  height: 64px;
+}
+.investigation-toolbar .agent-avatar,
+.investigation-toolbar .subtle-badge {
+  display: none;
+}
+.chat-agent-picker select {
+  background: transparent;
+  font-size: 16px;
+  color: #595c51;
+  font-weight: 500;
+  outline-offset: 4px;
+  max-width: 250px;
+}
+.conversation {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 24px max(25px, calc((100% - 760px) / 2));
+}
+.conversation-empty {
+  min-height: 0;
+}
+.investigation-welcome {
+  text-align: center;
+  max-width: 600px;
+  padding: 40px 0 25px;
+}
+.welcome-symbol {
+  border: 0;
+  background: transparent;
+  color: #b97655;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 18px;
+}
+.investigation-welcome h1 {
+  font-family: Georgia, serif;
+  font-size: 36px;
+  letter-spacing: -0.9px;
+  font-weight: 400;
+}
+.investigation-welcome > p:not(.eyebrow) {
+  font-size: 14px;
+  color: #7c7d71;
+  margin-top: 12px;
+}
+.suggested-question {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  margin: 28px auto 0;
+  max-width: 475px;
+  padding: 15px 17px;
+  border: 1px solid #e0dfd6;
+  background: #f5f4ef;
+  font-size: 12px;
+  color: #77796a;
+}
+.suggested-question > span {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  line-height: 1.7;
+}
+.suggested-question > svg {
+  position: static;
+  flex-shrink: 0;
+}
+.suggested-question > svg:last-child {
+  margin-left: auto;
+}
+.composer-area {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 810px;
+  margin: 0 auto;
+  padding: 14px 25px 16px;
+}
+.question-composer {
+  border-radius: 22px;
+  border-color: #d9d7cc;
+  box-shadow: 0 2px 9px #27291f05;
+  padding: 17px 20px 13px;
+  background: #fffefa;
+}
+.question-composer textarea {
+  font-size: 15px;
+  min-height: 52px;
+  resize: none;
+}
+.composer-toolbar {
+  padding-top: 5px;
+}
+.composer-toolbar .primary-button {
+  border-radius: 18px;
+  padding: 9px 16px;
+  font-size: 12px;
+}
+.composer-hint {
+  justify-content: center;
+  font-size: 10px;
+}
+.composer-hint > span {
+  display: none;
+}
+.answer-thread {
+  margin-bottom: 35px;
+}
+.question-bubble {
+  width: fit-content;
+  max-width: 90%;
+  margin-left: auto;
+  background: #ecebe4;
+  border: 0;
+  border-radius: 19px 19px 4px 19px;
+  padding: 13px 18px;
+  font-size: 14px;
+}
+.answer-heading h2 {
+  font-size: 12px;
+  font-weight: 500;
+  color: #747568;
+}
+.answer-heading .subtle-badge {
+  display: none;
+}
+.answer-heading .brand-icon {
+  background: transparent;
+  color: #b97655;
+}
+.answer-copy {
+  color: #454a3e;
+  font-size: 15px;
+  line-height: 1.9;
+}
+.inspector {
+  overflow-y: auto;
+}
+.secondary-content {
+  overflow-y: auto;
+  width: 100%;
+}
+.main-nav button:first-child {
+  display: none;
+}
+.workspace-name {
+  display: none;
+}
+.new-investigation {
+  margin-top: 30px;
+}
+.sidebar-heading {
+  margin-top: 25px;
+}
+.sidebar-recent > button {
+  line-height: 1.6;
+}
+.investigating-state {
+  padding: 30px 15px;
+}
+.investigating-state h2 {
+  font-size: 20px;
+}
+@media (max-width: 950px) {
+  .investigation-layout {
+    grid-template-columns: minmax(0, 1fr);
+    position: relative;
+  }
+  .inspector:not([hidden]) {
+    position: absolute;
+    inset: 64px 0 0 0;
+    z-index: 5;
+    background: var(--paper);
+    border: 0;
+    box-shadow: 0 0 15px #30312912;
+  }
+  .inspector-tabs {
+    height: 55px;
+  }
+}
+@media (max-width: 620px) {
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+  }
+  .workspace-sidebar {
+    height: auto;
+    flex-shrink: 0;
+    padding: 12px 16px 6px;
+  }
+  .brand {
+    font-size: 20px;
+  }
+  .main-nav {
+    margin-top: 9px;
+  }
+  .workspace-main {
+    flex: 1;
+  }
+  .investigation-toolbar {
+    height: 52px;
+    padding: 0 20px;
+  }
+  .conversation {
+    padding: 20px;
+  }
+  .investigation-welcome h1 {
+    font-size: 30px;
+  }
+  .composer-area {
+    padding: 10px 16px 13px;
+  }
+  .composer-toolbar > span {
+    font-size: 9px;
+  }
+  .inspector:not([hidden]) {
+    top: 52px;
+  }
+  .chat-agent-picker select {
+    font-size: 14px;
+    max-width: 190px;
+  }
+  .sidebar-bottom {
+    display: none;
+  }
+  .workspace-header {
+    display: flex;
+    height: 37px;
+  }
+  .breadcrumbs {
+    display: none;
+  }
+  .header-actions {
+    margin-left: auto;
+  }
+  .workspace-header .environment-badge {
+    display: none;
+  }
+  .answer-copy {
+    font-size: 14px;
+  }
+}

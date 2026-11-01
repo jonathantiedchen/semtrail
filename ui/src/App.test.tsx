@@ -83,12 +83,17 @@ test("investigates through the API and exposes supporting SQL", async () => {
   const user = userEvent.setup();
   render(<App />);
   await screen.findByLabelText("Ask revenue analyst");
-  await waitFor(() =>
-    expect(screen.getByLabelText("Ask revenue analyst")).toHaveValue(question),
-  );
-  await user.click(screen.getByRole("button", { name: "Run investigation" }));
-  await screen.findByText("What the data tells us");
+  await user.type(screen.getByLabelText("Ask revenue analyst"), question);
+  {
+    const input = screen.getByLabelText(
+      "Ask revenue analyst",
+    ) as HTMLTextAreaElement;
+    if (!input.value) await user.type(input, question);
+  }
+  await user.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText("Semtrail");
   expect(screen.getAllByText("700").length).toBeGreaterThan(0);
+  await user.click(screen.getByRole("button", { name: "Show details" }));
   await user.click(screen.getByRole("button", { name: /^SQL$/ }));
   expect(screen.getByText(run.queries[0].sql)).toBeInTheDocument();
   expect(fetch).toHaveBeenCalledWith(
@@ -115,11 +120,19 @@ test("switches between context and query evidence without losing the answer", as
   const user = userEvent.setup();
   render(<App />);
   await screen.findByLabelText("Ask revenue analyst");
-  await user.click(screen.getByRole("button", { name: "Run investigation" }));
+  {
+    const input = screen.getByLabelText(
+      "Ask revenue analyst",
+    ) as HTMLTextAreaElement;
+    if (!input.value) await user.type(input, question);
+  }
+  await user.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText("Revenue is 700 USD", { exact: false });
+  await user.click(screen.getByRole("button", { name: "Show details" }));
   await screen.findByRole("heading", { name: "Query evidence" });
   await user.click(screen.getByRole("button", { name: "Agent context" }));
   expect(screen.getByText("Enforced at query execution")).toBeInTheDocument();
-  expect(screen.getByText("What the data tells us")).toBeInTheDocument();
+  expect(screen.getByText("Semtrail")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /^Evidence/ }));
   expect(screen.getAllByText("700").length).toBeGreaterThan(0);
 });
@@ -146,9 +159,17 @@ test("opens evidence from a chart after the inspector is collapsed", async () =>
   render(<App />);
   await screen.findByLabelText("Ask revenue analyst");
   expect(
-    screen.getByRole("heading", { name: /A little curiosity/ }),
+    screen.getByRole("heading", { name: /What’s on your mind/ }),
   ).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Run investigation" }));
+  {
+    const input = screen.getByLabelText(
+      "Ask revenue analyst",
+    ) as HTMLTextAreaElement;
+    if (!input.value) await user.type(input, question);
+  }
+  await user.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText("Revenue is 700 USD", { exact: false });
+  await user.click(screen.getByRole("button", { name: "Show details" }));
   await screen.findByRole("heading", { name: "Query evidence" });
   await user.click(screen.getByRole("button", { name: "Hide details" }));
   expect(
@@ -160,4 +181,38 @@ test("opens evidence from a chart after the inspector is collapsed", async () =>
   expect(
     screen.getByRole("heading", { name: "Query evidence" }),
   ).toBeInTheDocument();
+});
+
+test("keeps earlier messages and sends server-owned context for follow-ups", async () => {
+  const user = userEvent.setup();
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  let count = 0;
+  vi.mocked(fetch).mockImplementation(async (...args) => {
+    if (args[1]?.method === "POST")
+      return new Response(
+        JSON.stringify({ ...run, run_id: `reply-${++count}` }),
+      );
+    return original(...args);
+  });
+  render(<App />);
+  const input = await screen.findByLabelText("Ask revenue analyst");
+  await user.type(input, question);
+  await user.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText("Revenue is 700 USD", { exact: false });
+  await user.type(input, "How many orders does that include?");
+  await user.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() =>
+    expect(
+      screen.getAllByText("Revenue is 700 USD", { exact: false }),
+    ).toHaveLength(2),
+  );
+  expect(fetch).toHaveBeenCalledWith(
+    "/api/agents/revenue/investigations",
+    expect.objectContaining({
+      body: JSON.stringify({
+        question: "How many orders does that include?",
+        previous_run_ids: ["reply-1"],
+      }),
+    }),
+  );
 });

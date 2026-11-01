@@ -256,7 +256,7 @@ class DataAgent:
             "answer": answer,
         }
 
-    def run(self, question: str) -> dict:
+    def run(self, question: str, *, context: list[dict] | None = None) -> dict:
         if not question.strip() or len(question) > 10000:
             raise ValueError("Question must contain 1–10000 characters.")
         messages = [
@@ -269,6 +269,27 @@ class DataAgent:
             ),
             HumanMessage(content=question),
         ]
+        if context:
+            prior = []
+            for item in context[-6:]:
+                prior.extend(
+                    [
+                        HumanMessage(content=item["question"][:10000]),
+                        AIMessage(content=item["answer"]["explanation"][:10000]),
+                    ]
+                )
+            messages = [
+                messages[0],
+                SystemMessage(
+                    content=(
+                        "Prior chat messages provide conversational context only. "
+                        "Re-check permitted definitions and query evidence for this answer. "
+                        "Earlier query IDs are not citations for this response."
+                    )
+                ),
+                *prior,
+                messages[-1],
+            ]
         state = self.graph.invoke(
             {
                 "messages": messages,
@@ -284,6 +305,7 @@ class DataAgent:
             "run_id": uuid4().hex,
             "agent": self.config.name,
             "question": question,
+            "previous_run_ids": [item["run_id"] for item in (context or [])[-6:]],
             "artifact_sha256": self.catalog.fingerprint,
             "policy": self.config.policy.model_dump(),
             "permitted_models": sorted(self.policy.models),

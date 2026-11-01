@@ -81,8 +81,14 @@ class AgentService:
             "artifact_sha256": catalog.fingerprint,
         }
 
-    def investigate(self, agent_id: str, question: str) -> dict:
+    def investigate(
+        self, agent_id: str, question: str, *, previous_run_ids: list[str] | None = None
+    ) -> dict:
         config = self.config(agent_id)
+        previous_run_ids = previous_run_ids or []
+        if len(previous_run_ids) > 6:
+            raise SemtrailError("A chat can reference at most six recent responses.")
+        context = [self.run(agent_id, run_id) for run_id in previous_run_ids]
         if self.demo:
             if question != DEMO_QUESTIONS.get(agent_id):
                 raise SemtrailError(
@@ -95,7 +101,7 @@ class AgentService:
         if not self.slots.acquire(blocking=False):
             raise SemtrailError("Two investigations are already running. Try again shortly.")
         try:
-            return DataAgent(config, model).run(question)
+            return DataAgent(config, model).run(question, context=context)
         finally:
             self.slots.release()
 
