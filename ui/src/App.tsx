@@ -14,6 +14,8 @@ import {
   GitBranch,
   KeyRound,
   Layers3,
+  LayoutDashboard,
+  PanelRight,
   Loader2,
   MessageSquare,
   Plus,
@@ -27,11 +29,14 @@ import {
 } from "lucide-react";
 import { api, downloadJson } from "./api";
 import type { Agent, Catalog, Run, RunSummary } from "./types";
+import WorkspaceHome from "./WorkspaceHome";
+import ResultVisuals from "./ResultVisuals";
 import CatalogPanel from "./CatalogPanel";
 import EvidencePanel, { CodeBlock } from "./EvidencePanel";
 
-type View = "investigate" | "catalog" | "history" | "integrations";
+type View = "overview" | "investigate" | "catalog" | "history" | "integrations";
 const navigation = [
+  { id: "overview" as const, title: "Overview", icon: LayoutDashboard },
   { id: "investigate" as const, title: "Investigate", icon: MessageSquare },
   { id: "catalog" as const, title: "Semantic catalog", icon: Layers3 },
   { id: "history" as const, title: "Run history", icon: Clock3 },
@@ -80,9 +85,10 @@ function Explanation({
   );
 }
 export default function App() {
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<"scope" | "evidence">("scope");
   const questionInput = useRef<HTMLTextAreaElement>(null);
-  const [view, setView] = useState<View>("investigate");
+  const [view, setView] = useState<View>("overview");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -169,6 +175,7 @@ export default function App() {
   async function investigate(event: React.FormEvent) {
     event.preventDefault();
     if (!agent || busy || !question.trim()) return;
+    setView("investigate");
     setBusy(true);
     setError("");
     setRun(null);
@@ -180,6 +187,7 @@ export default function App() {
       );
       setRun(result);
       setInspector("evidence");
+      setInspectorOpen(true);
       setQueryId(result.queries[0]?.query_id || "q1");
       setRuns(await api<RunSummary[]>("/runs", token));
     } catch (reason) {
@@ -200,6 +208,7 @@ export default function App() {
       setSelected(item.agent_id);
       setRun(result);
       setInspector("evidence");
+      setInspectorOpen(true);
       setQueryId(result.queries[0]?.query_id || "q1");
       setQuestion(result.question);
       setView("investigate");
@@ -215,15 +224,18 @@ export default function App() {
     setError("");
     setQuestion(agent?.demo_question || "");
     setInspector("scope");
-    setView("investigate");
-    questionInput.current?.focus();
+    setView("overview");
+    setInspectorOpen(false);
   }
   function selectCitation(id: string) {
     setQueryId(id);
     setInspector("evidence");
-    document
-      .getElementById("investigation-inspector")
-      ?.scrollIntoView({ block: "nearest" });
+    setInspectorOpen(true);
+    requestAnimationFrame(() =>
+      document
+        .getElementById("investigation-inspector")
+        ?.scrollIntoView?.({ block: "nearest" }),
+    );
   }
   return (
     <div className="app-shell">
@@ -232,13 +244,13 @@ export default function App() {
           <span className="brand-icon">
             <GitBranch size={20} />
           </span>
-          semtrail<span className="version">BETA</span>
+          semtrail<span className="version">/</span>
         </a>
         <div className="workspace-name">
           <span className="workspace-avatar">S</span>
           <div>
-            <strong>My workspace</strong>
-            <span>Local environment</span>
+            <strong>Workspace</strong>
+            <span>Personal · Self-hosted</span>
           </div>
           <span className="status-dot" />
         </div>
@@ -373,8 +385,30 @@ export default function App() {
             </button>
           </div>
         ) : null}
+        {view === "overview" ? (
+          <WorkspaceHome
+            runs={runs}
+            agents={agents}
+            selected={selected}
+            question={question}
+            onQuestion={setQuestion}
+            onSelect={(item) => {
+              setSelected(item.id);
+              setQuestion(item.demo_question || "");
+              setRun(null);
+            }}
+            onSubmit={investigate}
+            onOpenRun={openRun}
+            onCatalog={() => setView("catalog")}
+            onHistory={() => setView("history")}
+            mode={mode}
+            busy={busy}
+          />
+        ) : null}
         {view === "investigate" && agent ? (
-          <div className="investigation-layout">
+          <div
+            className={`investigation-layout ${inspectorOpen ? "" : "inspector-closed"}`}
+          >
             <main className="investigation-main">
               <div className="investigation-toolbar">
                 <div>
@@ -393,12 +427,13 @@ export default function App() {
                   </span>
                 </div>
                 <button
-                  className="icon-button"
-                  aria-label="New investigation"
-                  disabled={busy}
-                  onClick={newInvestigation}
+                  className="quiet-button inspector-toggle"
+                  aria-expanded={inspectorOpen}
+                  aria-controls="investigation-inspector"
+                  onClick={() => setInspectorOpen(!inspectorOpen)}
                 >
-                  <Plus size={17} />
+                  <PanelRight size={15} />
+                  {inspectorOpen ? "Hide details" : "Show details"}
                 </button>
               </div>
               <div
@@ -411,9 +446,9 @@ export default function App() {
                     </span>
                     <p className="eyebrow">YOUR DATA. WITH CONTEXT.</p>
                     <h1>
-                      What would you like
+                      Follow your curiosity.
                       <br />
-                      to understand?
+                      <em>Find the evidence.</em>
                     </h1>
                     <p>
                       Ask {displayName(agent).toLowerCase()} a question.
@@ -493,6 +528,10 @@ export default function App() {
                           ))}
                         </div>
                       ) : null}
+                      <ResultVisuals
+                        queries={run.queries}
+                        onInspect={selectCitation}
+                      />
                       {run.answer.definitions.length ? (
                         <div className="definition-note">
                           <BookOpen size={15} />
@@ -614,7 +653,11 @@ export default function App() {
                 </p>
               </div>
             </main>
-            <aside id="investigation-inspector" className="inspector">
+            <aside
+              id="investigation-inspector"
+              className="inspector"
+              hidden={!inspectorOpen}
+            >
               <div
                 className="inspector-tabs"
                 role="group"
@@ -773,7 +816,7 @@ export default function App() {
             </aside>
           </div>
         ) : null}
-        {view !== "investigate" ? (
+        {view !== "investigate" && view !== "overview" ? (
           <main className="secondary-content">
             <div className="page-heading">
               <h1>{titles[view][0]}</h1>

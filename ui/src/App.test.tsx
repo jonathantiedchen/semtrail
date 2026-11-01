@@ -88,7 +88,7 @@ test("investigates through the API and exposes supporting SQL", async () => {
   );
   await user.click(screen.getByRole("button", { name: "Run investigation" }));
   await screen.findByText("What the data tells us");
-  expect(screen.getByText("700")).toBeInTheDocument();
+  expect(screen.getAllByText("700").length).toBeGreaterThan(0);
   await user.click(screen.getByRole("button", { name: /^SQL$/ }));
   expect(screen.getByText(run.queries[0].sql)).toBeInTheDocument();
   expect(fetch).toHaveBeenCalledWith(
@@ -117,13 +117,11 @@ test("switches between context and query evidence without losing the answer", as
   await screen.findByLabelText("Ask revenue analyst");
   await user.click(screen.getByRole("button", { name: "Run investigation" }));
   await screen.findByRole("heading", { name: "Query evidence" });
-  await user.click(
-    screen.getByRole("button", { name: "Agent context" }),
-  );
+  await user.click(screen.getByRole("button", { name: "Agent context" }));
   expect(screen.getByText("Enforced at query execution")).toBeInTheDocument();
   expect(screen.getByText("What the data tells us")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /^Evidence/ }));
-  expect(screen.getByText("700")).toBeInTheDocument();
+  expect(screen.getAllByText("700").length).toBeGreaterThan(0);
 });
 
 test("filters the semantic catalog and explains empty search results", async () => {
@@ -141,4 +139,25 @@ test("filters the semantic catalog and explains empty search results", async () 
   ).not.toBeInTheDocument();
   await user.clear(search);
   expect(screen.getByRole("heading", { name: "revenue" })).toBeInTheDocument();
+});
+
+test("opens evidence from a chart after the inspector is collapsed", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByLabelText("Ask revenue analyst");
+  expect(
+    screen.getByRole("heading", { name: /A little curiosity/ }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Run investigation" }));
+  await screen.findByRole("heading", { name: "Query evidence" });
+  await user.click(screen.getByRole("button", { name: "Hide details" }));
+  expect(
+    screen.queryByRole("heading", { name: "Query evidence" }),
+  ).not.toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Inspect chart query q1" }),
+  );
+  expect(
+    screen.getByRole("heading", { name: "Query evidence" }),
+  ).toBeInTheDocument();
 });
